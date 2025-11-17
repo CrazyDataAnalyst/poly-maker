@@ -10,17 +10,23 @@ from poly_data.data_utils import set_position, set_order, update_positions
 
 def process_book_data(asset, j):
     global_state.all_data[asset] = {
-        'asset_id': j['asset_id'],  # token_id for the Yes token
+        'asset_id': j.get('asset_id'),  # token_id for the Yes token
         'bids': SortedDict(),
         'asks': SortedDict()
     }
 
-    global_state.all_data[asset]['bids'].update({float(entry['price']): float(entry['size']) for entry in j['bids']})
-    global_state.all_data[asset]['asks'].update({float(entry['price']): float(entry['size']) for entry in j['asks']})
+    global_state.all_data[asset]['bids'].update({float(entry['price']): float(entry['size']) for entry in j.get('bids',[])})
+    global_state.all_data[asset]['asks'].update({float(entry['price']): float(entry['size']) for entry in j.get('asks',[])})
 
-def process_price_change(asset, side, price_level, new_size):
-    if asset_id != global_state.all_data[asset]['asset_id']:
-        return  # skip updates for the No token to prevent duplicated updates
+def process_price_change(asset, asset_id, side, price_level, new_size):
+    # Check if this asset_id matches what we stored (to avoid duplicate updates)
+    if asset not in global_state.all_data:
+        return  # Asset not initialized yet
+    stored_asset_id = global_state.all_data[asset].get('asset_id')
+    
+    if stored_asset_id and asset_id != stored_asset_id:
+        return  # Skip updates for the No token to prevent duplicated updates
+        
     if side == 'bids':
         book = global_state.all_data[asset]['bids']
     else:
@@ -40,6 +46,7 @@ def process_data(json_data, trade=True):
     for j in json_data:
         event_type = j.get('event_type')
         asset = j.get('market')
+        asset_id = j.get('asset_id')
 
         if event_type == 'book':
             process_book_data(asset, j)
@@ -55,7 +62,7 @@ def process_data(json_data, trade=True):
                 side = 'bids' if data.get('side') == 'BUY' else 'asks'
                 price_level = float(data.get('price'))
                 new_size = float(data.get('size'))
-                process_price_change(asset, side, price_level, new_size)
+                process_price_change(asset, asset_id, side, price_level, new_size)
 
                 if trade:
                     asyncio.create_task(perform_trade(asset))
