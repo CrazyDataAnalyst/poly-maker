@@ -8,15 +8,15 @@ import time
 import asyncio
 from poly_data.data_utils import set_position, set_order, update_positions
 
-def process_book_data(asset, json_data):
+def process_book_data(asset, j):
     global_state.all_data[asset] = {
-        'asset_id': json_data['asset_id'],  # token_id for the Yes token
+        'asset_id': j['asset_id'],  # token_id for the Yes token
         'bids': SortedDict(),
         'asks': SortedDict()
     }
 
-    global_state.all_data[asset]['bids'].update({float(entry['price']): float(entry['size']) for entry in json_data['bids']})
-    global_state.all_data[asset]['asks'].update({float(entry['price']): float(entry['size']) for entry in json_data['asks']})
+    global_state.all_data[asset]['bids'].update({float(entry['price']): float(entry['size']) for entry in j['bids']})
+    global_state.all_data[asset]['asks'].update({float(entry['price']): float(entry['size']) for entry in j['asks']})
 
 def process_price_change(asset, side, price_level, new_size):
     if asset_id != global_state.all_data[asset]['asset_id']:
@@ -32,23 +32,29 @@ def process_price_change(asset, side, price_level, new_size):
     else:
         book[price_level] = new_size
 
-def process_data(json_datas, trade=True):
-
-    for json_data in json_datas:
-        event_type = json_data['event_type']
-        asset = json_data['market']
+def process_data(json_data, trade=True):
+    
+    if not isinstance(json_data, list): #Add data format handling
+        json_data = [json_data]
+        
+    for j in json_data:
+        event_type = j.get('event_type')
+        asset = j.get('market')
 
         if event_type == 'book':
-            process_book_data(asset, json_data)
+            process_book_data(asset, j)
 
             if trade:
                 asyncio.create_task(perform_trade(asset))
                 
         elif event_type == 'price_change':
-            for data in json_data['price_changes']:
-                side = 'bids' if data['side'] == 'BUY' else 'asks'
-                price_level = float(data['price'])
-                new_size = float(data['size'])
+            price_changes = j.get('price_changes')
+            if not isinstance(price_changes, list):
+                continue
+            for data in price_changes:
+                side = 'bids' if data.get('side') == 'BUY' else 'asks'
+                price_level = float(data.get('price'))
+                new_size = float(data.get('size'))
                 process_price_change(asset, side, price_level, new_size)
 
                 if trade:
@@ -76,31 +82,38 @@ def remove_from_performing(col, id):
         global_state.performing_timestamps[col].pop(id, None)
 
 def process_user_data(rows):
+    
+    if not isinstance(rows, list):
+        rows = [rows]
 
     for row in rows:
-        market = row['market']
+        market = row.get('market')
 
-        side = row['side'].lower()
-        token = row['asset_id']
+        side = row.get('side').lower()
+        token = row.get('asset_id')
             
         if token in global_state.REVERSE_TOKENS:     
             col = token + "_" + side
-
-            if row['event_type'] == 'trade':
+            event_type = row.get('event_type')
+            
+            if event_type == 'trade':
                 size = 0
                 price = 0
                 maker_outcome = ""
-                taker_outcome = row['outcome']
+                taker_outcome = row.get('outcome')
 
                 is_user_maker = False
-                for maker_order in row['maker_orders']:
-                    if maker_order['maker_address'].lower() == global_state.client.browser_wallet.lower():
+                maker_orders = row.get('maker_orders')
+                for maker_order in maker_orders:
+                    maker_addr = maker_order.get('maker_address')
+                    if maker_addr.lower() == global_state.client.browser_wallet.lower():
                         print("User is maker")
-                        size = float(maker_order['matched_amount'])
-                        price = float(maker_order['price'])
+                        
+                        size = float(maker_order.get('matched_amount'))
+                        price = float(maker_order.get('price'))
                         
                         is_user_maker = True
-                        maker_outcome = maker_order['outcome'] #this is curious
+                        maker_outcome = maker_order.get('outcome') #this is curious
 
                         if maker_outcome == taker_outcome:
                             side = 'buy' if side == 'sell' else 'sell' #need to reverse as we reverse token too
@@ -108,20 +121,20 @@ def process_user_data(rows):
                             token = global_state.REVERSE_TOKENS[token]
                 
                 if not is_user_maker:
-                    size = float(row['size'])
-                    price = float(row['price'])
+                    size = float(row.get('size'))
+                    price = float(row.get('price'))
                     print("User is taker")
 
-                print("TRADE EVENT FOR: ", row['market'], "ID: ", row['id'], "STATUS: ", row['status'], " SIDE: ", row['side'], "  MAKER OUTCOME: ", maker_outcome, " TAKER OUTCOME: ", taker_outcome, " PROCESSED SIDE: ", side, " SIZE: ", size) 
+                print("TRADE EVENT FOR: ", row.get('market'), "ID: ", row.get('id'), "STATUS: ", row.get('status'), " SIDE: ", row.get('side'), "  MAKER OUTCOME: ", maker_outcome, " TAKER OUTCOME: ", taker_outcome, " PROCESSED SIDE: ", side, " SIZE: ", size) 
+                status = row.get('status')
 
-
-                if row['status'] == 'CONFIRMED' or row['status'] == 'FAILED' :
-                    if row['status'] == 'FAILED':
+                if status in ('CONFIRMED', 'FAILED'):
+                    if status == 'FAILED':
                         print(f"Trade failed for {token}, decreasing")
                         asyncio.create_task(asyncio.sleep(2))
                         update_positions()
                     else:
-                        remove_from_performing(col, row['id'])
+                        remove_from_performing(col, row.get('id'))
                         print("Confirmed. Performing is ", len(global_state.performing[col]))
                         print("Last trade update is ", global_state.last_trade_update)
                         print("Performing is ", global_state.performing)
@@ -129,8 +142,8 @@ def process_user_data(rows):
                         
                         asyncio.create_task(perform_trade(market))
 
-                elif row['status'] == 'MATCHED':
-                    add_to_performing(col, row['id'])
+                elif status == 'MATCHED':
+                    add_to_performing(col, row.get('id'))
 
                     print("Matched. Performing is ", len(global_state.performing[col]))
                     set_position(token, side, size, price)
@@ -139,13 +152,13 @@ def process_user_data(rows):
                     print("Performing is ", global_state.performing)
                     print("Performing timestamps is ", global_state.performing_timestamps)
                     asyncio.create_task(perform_trade(market))
-                elif row['status'] == 'MINED':
-                    remove_from_performing(col, row['id'])
+                elif status == 'MINED':
+                    remove_from_performing(col, row.get('id'))
 
-            elif row['event_type'] == 'order':
-                print("ORDER EVENT FOR: ", row['market'], " STATUS: ",  row['status'], " TYPE: ", row['type'], " SIDE: ", side, "  ORIGINAL SIZE: ", row['original_size'], " SIZE MATCHED: ", row['size_matched'])
-                
-                set_order(token, side, float(row['original_size']) - float(row['size_matched']), row['price'])
+            elif event_type == 'order':
+                print("ORDER EVENT FOR: ", row.get('market'), " STATUS: ",  row.get('status'), " TYPE: ", row.get('type'), " SIDE: ", side, "  ORIGINAL SIZE: ", row.get('original_size'), " SIZE MATCHED: ", row.get('size_matched'))
+               
+                set_order(token, side, float(row.get('original_size')) - float(row.get('size_matched')), row.get('price'))
                 asyncio.create_task(perform_trade(market))
 
     else:
