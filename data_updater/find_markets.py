@@ -252,10 +252,8 @@ def process_single_row(row, client):
     ret['token1'] = token1
     ret['token2'] = token2
     ret['condition_id'] = row['condition_id']
-
     return ret
-
-
+       
 def get_all_results(all_df, client, max_workers=5, requests_per_second=3):
     all_results = []
     
@@ -335,6 +333,42 @@ def add_volatility(row):
     new_dict = {**row_dict, **stats}
     return new_dict
 
+#Calculate volume similarly to volatility
+def add_volume_to_df(df, max_workers=2, requests_per_second=3):  
+    results = []  
+    df = df.reset_index(drop=True)  
+    
+    # Create rate limiter instance for volatility requests
+    rate_limiter = RateLimiter(max_requests=requests_per_second, window_size=1.0)
+    
+    def fetch_volume_with_progress(args):  
+        idx, row = args  
+        try:
+            rate_limiter.acquire()
+            res = requests.get(f'https://gamma-api.polymarket.com/markets/slug/{row["market_slug"]}')  
+            volume = float(res.json().get('volumeNum', 0))  
+            row_dict = row.to_dict()  
+            row_dict['volume'] = volume  
+            return row_dict  
+        except:  
+            print("Error fetching volume")  
+            row_dict = row.to_dict()  
+            row_dict['volume'] = 0  
+            return row_dict  
+  
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:  
+        futures = [executor.submit(fetch_volume_with_progress, (idx, row)) for idx, row in df.iterrows()]  
+          
+        for future in concurrent.futures.as_completed(futures):  
+            result = future.result()  
+            if result is not None:  
+                results.append(result)  
+                  
+            if len(results) % (max_workers * 2) == 0:  
+                print(f'{len(results)} of {len(df)} (rate limited to {requests_per_second} req/sec)')  
+              
+    return pd.DataFrame(results)
+ 
 def add_volatility_to_df(df, max_workers=3, requests_per_second=3):
     
     results = []
