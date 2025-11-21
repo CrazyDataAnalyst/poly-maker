@@ -2,7 +2,7 @@ import time
 import pandas as pd
 from data_updater.trading_utils import get_clob_client
 from data_updater.google_utils import get_spreadsheet
-from data_updater.find_markets import get_sel_df, get_all_markets, get_all_results, get_markets, add_volatility_to_df, add_volume_to_df
+from data_updater.find_markets import get_sel_df, get_all_markets, get_all_results, get_markets, add_volatility_to_df, add_liquidity_metrics
 from gspread_dataframe import set_with_dataframe
 import traceback
 
@@ -96,24 +96,26 @@ def fetch_and_process_data():
 
     print(f'{pd.to_datetime("now")}: Fetched all markets data of length {len(all_markets)}.')
     new_df = add_volatility_to_df(all_markets)
-    new_df = add_volume_to_df(new_df) #add volume column
     new_df['volatility_sum'] =  new_df['24_hour'] + new_df['7_day'] + new_df['14_day']
     new_df = new_df.sort_values('volatility_sum', ascending=True)
     new_df['volatilty/reward'] = ((new_df['gm_reward_per_100'] / new_df['volatility_sum']).round(2)).astype(str)
 
-    new_df = new_df[['question', 'answer1', 'answer2', 'spread', 'rewards_daily_rate', 'gm_reward_per_100', 'sm_reward_per_100', 'bid_reward_per_100', 'ask_reward_per_100',  'volatility_sum', 'volatilty/reward', 'min_size', 'volume', '1_hour', '3_hour', '6_hour', '12_hour', '24_hour', '7_day', '30_day',  
+    new_df = new_df[['question', 'answer1', 'answer2', 'spread', 'rewards_daily_rate', 'gm_reward_per_100', 'sm_reward_per_100', 'bid_reward_per_100', 'ask_reward_per_100',  'volatility_sum', 'volatilty/reward', 'min_size', '1_hour', '3_hour', '6_hour', '12_hour', '24_hour', '7_day', '30_day',  
                      'best_bid', 'best_ask', 'volatility_price', 'max_spread', 'tick_size',  
                      'neg_risk',  'market_slug', 'token1', 'token2', 'condition_id']]
 
     
     volatility_df = new_df.copy()
-    volatility_df = volatility_df[(volatility_df['volatility_sum'] < 25) & (volatility_df['volume'] > 10000)]  #add volume filter
-    # volatility_df = sort_df(volatility_df)
-    volatility_df = volatility_df.sort_values('gm_reward_per_100', ascending=False)
-   
-    new_df = new_df.sort_values('gm_reward_per_100', ascending=False)
+    volatility_df = volatility_df[volatility_df['volatility_sum'] < 25]
     
-
+    volatility_df = add_liquidity_metrics(volatility_df)
+    volatility_df = volatility_df[(volatility_df['total_volume'] > 10000) & (volatility_df['turnover_rate'] > 0.2)]
+    # volatility_df = sort_df(volatility_df)
+    volatility_df = volatility_df[['question', 'answer1', 'answer2', 'spread', 'rewards_daily_rate', 'gm_reward_per_100', 'sm_reward_per_100', 'bid_reward_per_100', 'ask_reward_per_100',  'volatility_sum', 'volatilty/reward', 'min_size', 'total_volume', 'volume24hr', 'liquidity', 'turnover_rate', '1_hour', '3_hour', '6_hour', '12_hour', '24_hour', '7_day', '30_day',  
+                     'best_bid', 'best_ask', 'volatility_price', 'max_spread', 'tick_size',  
+                     'neg_risk',  'market_slug', 'token1', 'token2', 'condition_id']]
+    volatility_df = volatility_df.sort_values('gm_reward_per_100', ascending=False)
+    
     print(f'{pd.to_datetime("now")}: Fetched select market of length {len(new_df)}.')
 
     if len(new_df) > 50:
