@@ -334,30 +334,39 @@ def add_volatility(row):
     return new_dict
 
 #Calculate volume similarly to volatility
-def add_volume_to_df(df, max_workers=2, requests_per_second=3):  
+def add_liquidity_metrics(df, max_workers=2, requests_per_second=3):  
     results = []  
     df = df.reset_index(drop=True)  
     
     # Create rate limiter instance for volatility requests
     rate_limiter = RateLimiter(max_requests=requests_per_second, window_size=1.0)
     
-    def fetch_volume_with_progress(args):  
+    def fetch_metrics_with_progress(args):  
         idx, row = args  
         try:
             rate_limiter.acquire()
             res = requests.get(f'https://gamma-api.polymarket.com/markets/slug/{row["market_slug"]}')  
-            volume = float(res.json().get('volumeNum', 0))  
-            row_dict = row.to_dict()  
-            row_dict['volume'] = volume  
-            return row_dict  
+            data = res.json() 
+            
+            row_dict = row.to_dict()
+            row_dict['total_volume'] = round(float(data.get('volumeNum', 0)),2)
+            row_dict['volume24hr'] = round(float(data.get('volume24hr', 0)),2)
+            row_dict['liquidity'] = round(float(data.get('liquidityNum', 0)),2)
+            row_dict['turnover_rate'] = round((row_dict['volume24hr'] / row_dict['liquidity']),3) if row_dict['liquidity'] > 0 else 0 
+            return row_dict
+            
         except:  
-            print("Error fetching volume")  
-            row_dict = row.to_dict()  
-            row_dict['volume'] = 0  
+            print("Error fetching liquidity metrics")
+            
+            row_dict = row.to_dict()
+            row_dict['total_volume'] = 0
+            row_dict['volume24hr'] = 0  
+            row_dict['liquidity'] = 0  
+            row_dict['turnover_rate'] = 0 
             return row_dict  
   
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:  
-        futures = [executor.submit(fetch_volume_with_progress, (idx, row)) for idx, row in df.iterrows()]  
+        futures = [executor.submit(fetch_metrics_with_progress, (idx, row)) for idx, row in df.iterrows()]  
           
         for future in concurrent.futures.as_completed(futures):  
             result = future.result()  
@@ -365,7 +374,7 @@ def add_volume_to_df(df, max_workers=2, requests_per_second=3):
                 results.append(result)  
                   
             if len(results) % (max_workers * 2) == 0:  
-                print(f'{len(results)} of {len(df)} (rate limited to {requests_per_second} req/sec)')  
+                print(f'{len(results)} of {len(df)} liquidity metrics (rate limited to {requests_per_second} req/sec)')  
               
     return pd.DataFrame(results)
  
