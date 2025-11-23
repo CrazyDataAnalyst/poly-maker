@@ -3,15 +3,37 @@ from poly_utils.google_utils import get_spreadsheet
 import pandas as pd 
 import os
 
+
 def pretty_print(txt, dic):
+    """
+    Prints a dictionary in a formatted JSON string for better readability.
+
+    Args:
+        txt (str): A descriptive text to print before the dictionary.
+        dic (dict): The dictionary to be pretty-printed.
+    """
     print("\n", txt, json.dumps(dic, indent=4))
+
 
 def get_sheet_df(read_only=None):
     """
-    Get sheet data with optional read-only mode
-    
+    Fetches and processes data from the Google Sheet, combining selected markets
+    with all market data and extracting hyperparameters.
+
+    This function handles both read-only and authenticated access to the Google
+    Sheet, automatically detecting the mode based on the presence of credentials.
+
     Args:
-        read_only (bool): If None, auto-detects based on credentials availability
+        read_only (bool, optional): If True, forces read-only mode. If None,
+                                  the function auto-detects based on credentials.
+                                  Defaults to None.
+
+    Returns:
+        tuple: A tuple containing:
+               - result (pandas.DataFrame): A DataFrame of selected markets merged
+                 with all market data.
+               - hyperparams (dict): A dictionary of hyperparameters, structured
+                 by type.
     """
     all = 'All Markets'
     sel = 'Selected Markets'

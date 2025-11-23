@@ -13,18 +13,28 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 def update_once():
     """
-    Initialize the application state by fetching market data, positions, and orders.
+    Performs a one-time initial update of the application state.
+
+    This function fetches essential data required for the bot to start trading,
+    including market configurations from Google Sheets, and current positions and
+    orders from the Polymarket API.
     """
     update_markets()    # Get market information from Google Sheets
     update_positions()  # Get current positions from Polymarket
     update_orders()     # Get current orders from Polymarket
 
+
 def remove_from_pending():
     """
-    Clean up stale trades that have been pending for too long (>15 seconds).
-    This prevents the system from getting stuck on trades that may have failed.
+    Cleans up stale trades that have been in a pending state for too long.
+
+    This function iterates through trades marked as "performing" and removes any
+    that have been pending for more than 15 seconds. This is a failsafe to
+    prevent the system from getting stuck on trades that may have failed or are
+    not being confirmed in a timely manner.
     """
     try:
         current_time = time.time()
@@ -46,12 +56,15 @@ def remove_from_pending():
         print("Error in remove_from_pending")
         print(traceback.format_exc())
 
+
 def update_periodically():
     """
-    Background thread function that periodically updates market data, positions and orders.
-    - Positions and orders are updated every 5 seconds
-    - Market data is updated every 30 seconds (every 6 cycles)
-    - Stale pending trades are removed each cycle
+    Runs in a background thread to periodically update application state.
+
+    This function is responsible for:
+    - Cleaning up stale pending trades.
+    - Updating positions and orders every 5 seconds.
+    - Updating market data from Google Sheets every 30 seconds.
     """
     i = 1
     while True:
@@ -76,9 +89,14 @@ def update_periodically():
             print("Error in update_periodically")
             print(traceback.format_exc())
             
+
 async def main():
     """
-    Main application entry point. Initializes client, data, and manages websocket connections.
+    The main entry point for the application.
+
+    This asynchronous function initializes the Polymarket client, performs the
+    initial data fetch, starts the background update thread, and manages the
+    WebSocket connections in a resilient loop.
     """
     # Initialize client
     global_state.client = PolymarketClient()

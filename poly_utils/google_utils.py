@@ -8,15 +8,24 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 def get_spreadsheet(read_only=False):
     """
-    Get Google Spreadsheet with optional read-only mode.
-    
+    Initializes and returns a gspread Spreadsheet object for authenticated access
+    or a read-only wrapper for public access via CSV export.
+
     Args:
-        read_only (bool): If True, uses public CSV export when credentials are missing
-    
+        read_only (bool, optional): If True, forces the use of the read-only
+                                  wrapper, which is useful when credentials are
+                                  not available. Defaults to False.
+
     Returns:
-        Spreadsheet object or ReadOnlySpreadsheet wrapper for read-only mode
+        gspread.Spreadsheet or ReadOnlySpreadsheet: An object to interact with
+                                                      the Google Sheet.
+
+    Raises:
+        ValueError: If the SPREADSHEET_URL environment variable is not set.
+        FileNotFoundError: If credentials are not found and read_only is False.
     """
     spreadsheet_url = os.getenv("SPREADSHEET_URL")
     if not spreadsheet_url:
@@ -38,33 +47,61 @@ def get_spreadsheet(read_only=False):
     spreadsheet = client.open_by_url(spreadsheet_url)
     return spreadsheet
 
+
 class ReadOnlySpreadsheet:
-    """Read-only wrapper for Google Sheets using public CSV export"""
+    """
+    A read-only wrapper for Google Sheets that uses public CSV export URLs.
+    This class is used when authenticated access is not available.
+    """
     
     def __init__(self, spreadsheet_url):
         self.spreadsheet_url = spreadsheet_url
         self.sheet_id = self._extract_sheet_id(spreadsheet_url)
         
     def _extract_sheet_id(self, url):
-        """Extract sheet ID from Google Sheets URL"""
+        """
+        Extracts the sheet ID from a Google Sheets URL.
+
+        Args:
+            url (str): The Google Sheets URL.
+
+        Returns:
+            str: The extracted sheet ID.
+        """
         match = re.search(r'/spreadsheets/d/([a-zA-Z0-9-_]+)', url)
         if not match:
             raise ValueError("Invalid Google Sheets URL")
         return match.group(1)
     
     def worksheet(self, title):
-        """Return a read-only worksheet"""
+        """
+        Returns a read-only worksheet object.
+
+        Args:
+            title (str): The title of the worksheet.
+
+        Returns:
+            ReadOnlyWorksheet: A read-only worksheet object.
+        """
         return ReadOnlyWorksheet(self.sheet_id, title)
 
+
 class ReadOnlyWorksheet:
-    """Read-only worksheet that fetches data via CSV export"""
+    """
+    Represents a read-only worksheet that fetches data via CSV export.
+    """
     
     def __init__(self, sheet_id, title):
         self.sheet_id = sheet_id
         self.title = title
         
     def get_all_records(self):
-        """Get all records from the worksheet as a list of dictionaries"""
+        """
+        Fetches all records from the worksheet as a list of dictionaries.
+
+        Returns:
+            list: A list of dictionaries representing the rows of the sheet.
+        """
         try:
             # URL encode the sheet title to handle spaces and special characters
             import urllib.parse
@@ -133,7 +170,12 @@ class ReadOnlyWorksheet:
             return []
     
     def get_all_values(self):
-        """Get all values from the worksheet as a list of lists"""
+        """
+        Fetches all values from the worksheet as a list of lists.
+
+        Returns:
+            list: A list of lists representing the rows and columns of the sheet.
+        """
         try:
             csv_url = f"https://docs.google.com/spreadsheets/d/{self.sheet_id}/gviz/tq?tqx=out:csv&sheet={self.title}"
             response = requests.get(csv_url, timeout=30)

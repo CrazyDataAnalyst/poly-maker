@@ -8,7 +8,16 @@ import time
 import asyncio
 from poly_data.data_utils import set_position, set_order, update_positions
 
+
 def process_book_data(asset, j):
+    """
+    Initializes or resets the order book for a given asset.
+
+    Args:
+        asset (str): The market identifier.
+        j (dict): A JSON object containing the book data, including asset_id,
+                  bids, and asks.
+    """
     global_state.all_data[asset] = {
         'asset_id': j.get('asset_id'),  # token_id for the Yes token
         'bids': SortedDict(),
@@ -18,7 +27,19 @@ def process_book_data(asset, j):
     global_state.all_data[asset]['bids'].update({float(entry['price']): float(entry['size']) for entry in j.get('bids',[])})
     global_state.all_data[asset]['asks'].update({float(entry['price']): float(entry['size']) for entry in j.get('asks',[])})
 
+
 def process_price_change(asset, asset_id, side, price_level, new_size):
+    """
+    Updates the order book for an asset based on a price change event.
+
+    Args:
+        asset (str): The market identifier.
+        asset_id (str): The asset ID (token_id) of the instrument being updated.
+        side (str): The side of the book to update, either 'bids' or 'asks'.
+        price_level (float): The price level of the update.
+        new_size (float): The new size at the specified price level. A size of 0
+                          indicates the removal of the price level.
+    """
     # Check if this asset_id matches what we stored (to avoid duplicate updates)
     if asset not in global_state.all_data:
         return  # Asset not initialized yet
@@ -38,7 +59,18 @@ def process_price_change(asset, asset_id, side, price_level, new_size):
     else:
         book[price_level] = new_size
 
+
 def process_data(json_data, trade=True):
+    """
+    Processes incoming JSON data from the WebSocket, routing it to the appropriate
+    handler based on the event type.
+
+    Args:
+        json_data (dict or list): A JSON object or a list of JSON objects from the
+                                  WebSocket feed.
+        trade (bool, optional): A flag to enable or disable trade execution.
+                                Defaults to True.
+    """
     
     if not isinstance(json_data, list): #Add data format handling
         json_data = [json_data]
@@ -70,7 +102,17 @@ def process_data(json_data, trade=True):
 
         # pretty_print(f'Received book update for {asset}:', global_state.all_data[asset])
 
+
 def add_to_performing(col, id):
+    """
+    Adds a trade ID to the set of performing trades for a given collection and
+    records the timestamp.
+
+    Args:
+        col (str): The collection identifier, typically representing a market
+                   and side (e.g., 'token_buy').
+        id (str): The trade ID to add.
+    """
     if col not in global_state.performing:
         global_state.performing[col] = set()
     
@@ -81,14 +123,31 @@ def add_to_performing(col, id):
     global_state.performing[col].add(id)
     global_state.performing_timestamps[col][id] = time.time()
 
+
 def remove_from_performing(col, id):
+    """
+    Removes a trade ID from the set of performing trades and its associated
+    timestamp.
+
+    Args:
+        col (str): The collection identifier.
+        id (str): The trade ID to remove.
+    """
     if col in global_state.performing:
         global_state.performing[col].discard(id)
 
     if col in global_state.performing_timestamps:
         global_state.performing_timestamps[col].pop(id, None)
 
+
 def process_user_data(rows):
+    """
+    Processes user-specific data from the WebSocket, such as trade confirmations
+    and order updates.
+
+    Args:
+        rows (list): A list of data rows, each representing a user-related event.
+    """
     
     if not isinstance(rows, list):
         rows = [rows]

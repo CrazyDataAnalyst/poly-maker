@@ -13,14 +13,35 @@ load_dotenv()
 
 spreadsheet = get_spreadsheet()
 
+
 def get_markets_df(wk_full):
+    """
+    Retrieves and formats the markets DataFrame from the Google Sheet.
+
+    Args:
+        wk_full (gspread.Worksheet): The worksheet containing all market data.
+
+    Returns:
+        pandas.DataFrame: A DataFrame with essential market information.
+    """
     markets_df = pd.DataFrame(wk_full.get_all_records())
     markets_df = markets_df[['question', 'answer1', 'answer2', 'token1', 'token2']]
     markets_df['token1'] = markets_df['token1'].astype(str)
     markets_df['token2'] = markets_df['token2'].astype(str)
     return markets_df
 
+
 def get_all_orders(client):
+    """
+    Fetches and processes all open orders for the client.
+
+    Args:
+        client: The Polymarket client instance.
+
+    Returns:
+        pandas.DataFrame: A DataFrame of open orders, or an empty DataFrame if
+                          no orders exist.
+    """
     orders = client.client.get_orders()
     orders_df = pd.DataFrame(orders)
 
@@ -33,7 +54,18 @@ def get_all_orders(client):
     else:
         return pd.DataFrame()
     
+
 def get_all_positions(client):
+    """
+    Fetches and processes all positions for the client.
+
+    Args:
+        client: The Polymarket client instance.
+
+    Returns:
+        pandas.DataFrame: A DataFrame of all positions, or an empty DataFrame
+                          on failure.
+    """
     try:
         positions = client.get_all_positions()
         positions = positions[['asset', 'size', 'avgPrice', 'curPrice', 'percentPnl']]
@@ -42,7 +74,20 @@ def get_all_positions(client):
     except:
         return pd.DataFrame()
     
+
 def combine_dfs(orders_df, positions, markets_df, selected_df):
+    """
+    Combines orders, positions, and market data into a single summary DataFrame.
+
+    Args:
+        orders_df (pandas.DataFrame): DataFrame of open orders.
+        positions (pandas.DataFrame): DataFrame of current positions.
+        markets_df (pandas.DataFrame): DataFrame of all market data.
+        selected_df (pandas.DataFrame): DataFrame of selected markets.
+
+    Returns:
+        pandas.DataFrame: A combined and formatted DataFrame for the summary.
+    """
     merged_df = orders_df.merge(positions, left_on=['asset_id'], right_on=['asset'], how='outer')
     merged_df['asset_id'] = merged_df['asset_id'].combine_first(merged_df['asset'])
     merged_df = merged_df.drop(columns='asset', axis=1)
@@ -72,7 +117,17 @@ def combine_dfs(orders_df, positions, markets_df, selected_df):
     combined_df = combined_df.sort_values('marketInSelected')
     return combined_df
 
+
 def get_earnings(client):
+    """
+    Fetches the user's earnings data from the Polymarket rewards API.
+
+    Args:
+        client: The Polymarket client instance.
+
+    Returns:
+        pandas.DataFrame: A DataFrame containing earnings data for each market.
+    """
     args = RequestArgs(method='GET', request_path='/rewards/user/markets')
     l2Headers = create_level_2_headers(client.signer, client.creds, args)
     url = "https://polymarket.com/api/rewards/markets"
@@ -101,8 +156,14 @@ def get_earnings(client):
     return data
 
 
-
 def update_stats_once(client):
+    """
+    Performs a one-time update of the account statistics, fetches all relevant
+    data, combines it, and updates the 'Summary' worksheet in the Google Sheet.
+
+    Args:
+        client: The Polymarket client instance.
+    """
     spreadsheet = get_spreadsheet()
     wk_full = spreadsheet.worksheet('Full Markets')
     wk_summary = spreadsheet.worksheet('Summary')

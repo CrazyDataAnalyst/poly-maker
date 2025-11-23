@@ -15,7 +15,16 @@ wk_vol = spreadsheet.worksheet("Volatility Markets")
 
 sel_df = get_sel_df(spreadsheet, "Selected Markets")
 
+
 def update_sheet(data, worksheet):
+    """
+    Updates a Google Sheet worksheet with the provided DataFrame, clearing any
+    pre-existing data.
+
+    Args:
+        data (pandas.DataFrame): The DataFrame to write to the sheet.
+        worksheet (gspread.Worksheet): The worksheet to update.
+    """
     all_values = worksheet.get_all_values()
     existing_num_rows = len(all_values)
     existing_num_cols = len(all_values[0]) if all_values else 0
@@ -34,7 +43,18 @@ def update_sheet(data, worksheet):
     # Update the sheet with the padded DataFrame, including column headers
     set_with_dataframe(worksheet, padded_data, include_index=False, include_column_header=True, resize=True)
 
+
 def sort_df(df):
+    """
+    Sorts the DataFrame of markets based on a composite score that considers
+    rewards, volatility, and price proximity to key levels.
+
+    Args:
+        df (pandas.DataFrame): The DataFrame of markets to sort.
+
+    Returns:
+        pandas.DataFrame: The sorted DataFrame.
+    """
     # Calculate the mean and standard deviation for each column
     mean_gm = df['gm_reward_per_100'].mean()
     std_gm = df['gm_reward_per_100'].std()
@@ -74,7 +94,15 @@ def sort_df(df):
     
     return sorted_df
 
+
 def fetch_and_process_data():
+    """
+    Fetches, processes, and updates all market data.
+
+    This function orchestrates the entire data update process, from fetching
+    raw market data to processing it with volatility and liquidity metrics,
+    and finally updating the relevant Google Sheet worksheets.
+    """
     global spreadsheet, client, wk_all, wk_vol, sel_df
     
     spreadsheet = get_spreadsheet()

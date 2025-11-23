@@ -25,7 +25,25 @@ import poly_data.global_state as global_state
 #                 return 0
 #     return api_avgPrice
 
+
 def get_best_bid_ask_deets(market, name, size, deviation_threshold=0.05):
+    """
+    Calculates and returns detailed bid and ask information for a given market.
+
+    Args:
+        market (str): The market identifier.
+        name (str): The name of the token, used to determine if prices should be
+                    inverted (e.g., for 'token2').
+        size (float): The minimum size to consider when finding the best bid/ask.
+        deviation_threshold (float, optional): The percentage deviation from the
+                                               mid-price to calculate liquidity sums.
+                                               Defaults to 0.05.
+
+    Returns:
+        dict: A dictionary containing detailed bid and ask information, including
+              best prices and sizes, second best prices and sizes, top of book
+              prices, and liquidity sums within the deviation threshold.
+    """
 
     best_bid, best_bid_size, second_best_bid, second_best_bid_size, top_bid = find_best_price_with_size(global_state.all_data[market]['bids'], size, reverse=True)
     best_ask, best_ask_size, second_best_ask, second_best_ask_size, top_ask = find_best_price_with_size(global_state.all_data[market]['asks'], size, reverse=False)
@@ -81,6 +99,21 @@ def get_best_bid_ask_deets(market, name, size, deviation_threshold=0.05):
 
 
 def find_best_price_with_size(price_dict, min_size, reverse=False):
+    """
+    Finds the best and second-best prices in a price dictionary that meet a
+    minimum size requirement.
+
+    Args:
+        price_dict (dict): A dictionary of price-size pairs.
+        min_size (float): The minimum size a price level must have to be
+                          considered.
+        reverse (bool, optional): Whether to search in reverse order. Defaults
+                                  to False.
+
+    Returns:
+        tuple: A tuple containing the best price, best size, second-best price,
+               second-best size, and the top price in the dictionary.
+    """
     lst = list(price_dict.items())
 
     if reverse:
@@ -106,7 +139,26 @@ def find_best_price_with_size(price_dict, min_size, reverse=False):
 
     return best_price, best_size, second_best_price, second_best_size, top_price
 
+
 def get_order_prices(best_bid, best_bid_size, top_bid,  best_ask, best_ask_size, top_ask, avgPrice, row):
+    """
+    Calculates the bid and ask prices for an order based on market conditions
+    and predefined parameters.
+
+    Args:
+        best_bid (float): The best available bid price.
+        best_bid_size (float): The size at the best bid price.
+        top_bid (float): The highest bid price in the order book.
+        best_ask (float): The best available ask price.
+        best_ask_size (float): The size at the best ask price.
+        top_ask (float): The lowest ask price in the order book.
+        avgPrice (float): The average price of the current position.
+        row (pandas.Series): A row from the configuration spreadsheet containing
+                             parameters for the market.
+
+    Returns:
+        tuple: A tuple containing the calculated bid and ask prices.
+    """
 
     bid_price = best_bid + row['tick_size']
     ask_price = best_ask - row['tick_size']
@@ -139,17 +191,51 @@ def get_order_prices(best_bid, best_bid_size, top_bid,  best_ask, best_ask_size,
     return bid_price, ask_price
 
 
-
-
 def round_down(number, decimals):
+    """
+    Rounds a number down to a specified number of decimal places.
+
+    Args:
+        number (float): The number to round down.
+        decimals (int): The number of decimal places to round to.
+
+    Returns:
+        float: The rounded-down number.
+    """
     factor = 10 ** decimals
     return math.floor(number * factor) / factor
 
+
 def round_up(number, decimals):
+    """
+    Rounds a number up to a specified number of decimal places.
+
+    Args:
+        number (float): The number to round up.
+        decimals (int): The number of decimal places to round to.
+
+    Returns:
+        float: The rounded-up number.
+    """
     factor = 10 ** decimals
     return math.ceil(number * factor) / factor
 
+
 def get_buy_sell_amount(position, bid_price, row, other_token_position=0):
+    """
+    Calculates the appropriate buy and sell amounts based on the current position,
+    market conditions, and configuration parameters.
+
+    Args:
+        position (float): The current position size for the token.
+        bid_price (float): The current bid price.
+        row (pandas.Series): Configuration parameters for the market.
+        other_token_position (float, optional): The position size for the other
+                                                token in the market. Defaults to 0.
+
+    Returns:
+        tuple: A tuple containing the calculated buy and sell amounts.
+    """
     buy_amount = 0
     sell_amount = 0
 

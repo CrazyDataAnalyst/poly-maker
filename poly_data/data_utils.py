@@ -3,8 +3,19 @@ from poly_data.utils import get_sheet_df
 import time
 import poly_data.global_state as global_state
 
-#sth here seems to be removing the position
+
 def update_positions(avgOnly=False):
+    """
+    Updates the global positions state by fetching the latest data from the client.
+
+    This function can perform a full update (size and average price) or an
+    average price-only update. It includes logic to avoid updating positions
+    if there are pending trades.
+
+    Args:
+        avgOnly (bool, optional): If True, only the average price of positions
+                                  is updated. Defaults to False.
+    """
     pos_df = global_state.client.get_all_positions()
 
     for idx, row in pos_df.iterrows():
@@ -43,14 +54,37 @@ def update_positions(avgOnly=False):
     
         global_state.positions[asset] = position
 
+
 def get_position(token):
+    """
+    Retrieves the current position for a given token.
+
+    Args:
+        token (str or int): The token identifier.
+
+    Returns:
+        dict: A dictionary containing the size and average price of the position,
+              or a default dictionary with 0 values if no position exists.
+    """
     token = str(token)
     if token in global_state.positions:
         return global_state.positions[token]
     else:
         return {'size': 0, 'avgPrice': 0}
 
+
 def set_position(token, side, size, price, source='websocket'):
+    """
+    Sets or updates the position for a given token based on a trade.
+
+    Args:
+        token (str or int): The token identifier.
+        side (str): The side of the trade ('buy' or 'sell').
+        size (float): The size of the trade.
+        price (float): The price of the trade.
+        source (str, optional): The source of the position update. Defaults to
+                               'websocket'.
+    """
     token = str(token)
     size = float(size)
     price = float(price)
@@ -88,7 +122,14 @@ def set_position(token, side, size, price, source='websocket'):
 
     print(f"Updated position from {source}, set to ", global_state.positions[token])
 
+
 def update_orders():
+    """
+    Updates the global orders state by fetching all open orders from the client.
+
+    This function also includes logic to cancel orders if multiple open orders
+    are found for the same token.
+    """
     all_orders = global_state.client.get_all_orders()
 
     orders = {}
@@ -119,7 +160,18 @@ def update_orders():
 
     global_state.orders = orders
 
+
 def get_order(token):
+    """
+    Retrieves the current open orders for a given token.
+
+    Args:
+        token (str or int): The token identifier.
+
+    Returns:
+        dict: A dictionary containing the buy and sell orders for the token,
+              or a default dictionary with empty orders if no orders exist.
+    """
     token = str(token)
     if token in global_state.orders:
 
@@ -133,7 +185,17 @@ def get_order(token):
     else:
         return {'buy': {'price': 0, 'size': 0}, 'sell': {'price': 0, 'size': 0}}
     
+
 def set_order(token, side, size, price):
+    """
+    Sets or updates the record of an open order.
+
+    Args:
+        token (str or int): The token identifier.
+        side (str): The side of the order ('buy' or 'sell').
+        size (float): The size of the order.
+        price (float): The price of the order.
+    """
     curr = {}
     curr = {side: {'price': 0, 'size': 0}}
 
@@ -143,9 +205,14 @@ def set_order(token, side, size, price):
     global_state.orders[str(token)] = curr
     print("Updated order, set to ", curr)
 
-    
 
 def update_markets():
+    """
+    Updates the market data and parameters from the Google Sheet.
+
+    This function fetches the latest market data and hyperparameters and updates
+    the global state. It also populates the token mappings and performing sets.
+    """
     received_df, received_params = get_sheet_df()
 
     if len(received_df) > 0:

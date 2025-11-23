@@ -40,10 +40,14 @@ class PolymarketClient:
     
     def __init__(self, pk='default') -> None:
         """
-        Initialize the Polymarket client with API and blockchain connections.
-        
+        Initializes the Polymarket client, setting up connections to the Polymarket API
+        and the Polygon blockchain. It configures the necessary credentials, contract
+        instances, and Web3 provider.
+
         Args:
-            pk (str, optional): Private key identifier, defaults to 'default'
+            pk (str, optional): A private key identifier. Defaults to 'default',
+                                which prompts the client to load the key from environment
+                                variables.
         """
         host="https://clob.polymarket.com"
 
@@ -102,17 +106,24 @@ class PolymarketClient:
     
     def create_order(self, marketId, action, price, size, neg_risk=False):
         """
-        Create and submit a new order to the Polymarket order book.
-        
+        Creates and submits a new order to the Polymarket order book.
+
+        This method constructs an order with the specified parameters, signs it, and
+        posts it to the Polymarket API. It handles both standard and negative risk
+        markets.
+
         Args:
-            marketId (str): ID of the market token to trade
-            action (str): "BUY" or "SELL"
-            price (float): Order price (0-1 range for prediction markets)
-            size (float): Order size in USDC
-            neg_risk (bool, optional): Whether this is a negative risk market. Defaults to False.
-            
+            marketId (str): The ID of the market token to be traded.
+            action (str): The order action, either "BUY" or "SELL".
+            price (float): The price for the order, typically in the 0-1 range for
+                           prediction markets.
+            size (float): The size of the order in USDC.
+            neg_risk (bool, optional): Specifies if the market is a negative risk
+                                       market. Defaults to False.
+
         Returns:
-            dict: Response from the API containing order details, or empty dict on error
+            dict: A dictionary containing the API response with order details upon
+                  successful creation, or an empty dictionary if an error occurs.
         """
         # Create order parameters
         order_args = OrderArgs(
@@ -140,13 +151,15 @@ class PolymarketClient:
 
     def get_order_book(self, market):
         """
-        Get the current order book for a specific market.
-        
+        Retrieves the current order book for a specific market.
+
         Args:
-            market (str): Market ID to query
-            
+            market (str): The ID of the market to query.
+
         Returns:
-            tuple: (bids_df, asks_df) - DataFrames containing bid and ask orders
+            tuple: A tuple containing two pandas DataFrames: (bids_df, asks_df).
+                   - bids_df: DataFrame of bid orders.
+                   - asks_df: DataFrame of ask orders.
         """
         orderBook = self.client.get_order_book(market)
         return pd.DataFrame(orderBook.bids).astype(float), pd.DataFrame(orderBook.asks).astype(float)
@@ -154,64 +167,73 @@ class PolymarketClient:
 
     def get_usdc_balance(self):
         """
-        Get the USDC balance of the connected wallet.
-        
+        Retrieves the USDC balance of the connected wallet.
+
         Returns:
-            float: USDC balance in decimal format
+            float: The USDC balance, adjusted for decimals.
         """
         return self.usdc_contract.functions.balanceOf(self.browser_wallet).call() / 10**6
      
     def get_pos_balance(self):
         """
-        Get the total value of all positions for the connected wallet.
-        
+        Retrieves the total value of all positions for the connected wallet from the
+        Polymarket data API.
+
         Returns:
-            float: Total position value in USDC
+            float: The total value of all positions in USDC.
         """
         res = requests.get(f'https://data-api.polymarket.com/value?user={self.browser_wallet}')
         return float(res.json()['value'])
 
     def get_total_balance(self):
         """
-        Get the combined value of USDC balance and all positions.
-        
+        Calculates the total account value by combining the USDC balance and the
+        total position value.
+
         Returns:
-            float: Total account value in USDC
+            float: The total account value in USDC.
         """
         return self.get_usdc_balance() + self.get_pos_balance()
 
     def get_all_positions(self):
         """
-        Get all positions for the connected wallet across all markets.
-        
+        Retrieves all positions for the connected wallet across all markets from the
+        Polymarket data API.
+
         Returns:
-            DataFrame: All positions with details like market, size, avgPrice
+            pandas.DataFrame: A DataFrame containing detailed information about each
+                              position, such as market, size, and average price.
         """
         res = requests.get(f'https://data-api.polymarket.com/positions?user={self.browser_wallet}')
         return pd.DataFrame(res.json())
     
     def get_raw_position(self, tokenId):
         """
-        Get the raw token balance for a specific market outcome token.
-        
+        Retrieves the raw token balance for a specific market outcome token directly
+        from the smart contract.
+
         Args:
-            tokenId (int): Token ID to query
-            
+            tokenId (int): The token ID to query.
+
         Returns:
-            int: Raw token amount (before decimal conversion)
+            int: The raw token amount, not adjusted for decimals.
         """
         return int(self.conditional_tokens.functions.balanceOf(self.browser_wallet, int(tokenId)).call())
 
     def get_position(self, tokenId):
         """
-        Get both raw and formatted position size for a token.
-        
+        Retrieves both the raw and formatted position size for a specific token.
+
+        This method filters out very small "dust" amounts by treating any position
+        less than 1 share as 0.
+
         Args:
-            tokenId (int): Token ID to query
-            
+            tokenId (int): The token ID to query.
+
         Returns:
-            tuple: (raw_position, shares) - Raw token amount and decimal shares
-                   Shares less than 1 are treated as 0 to avoid dust amounts
+            tuple: A tuple containing:
+                   - raw_position (int): The raw token amount.
+                   - shares (float): The position size in decimal shares (e.g., 10.5).
         """
         raw_position = self.get_raw_position(tokenId)
         shares = float(raw_position / 1e6)
@@ -224,10 +246,10 @@ class PolymarketClient:
     
     def get_all_orders(self):
         """
-        Get all open orders for the connected wallet.
-        
+        Retrieves all open orders for the connected wallet.
+
         Returns:
-            DataFrame: All open orders with their details
+            pandas.DataFrame: A DataFrame containing details of all open orders.
         """
         orders_df = pd.DataFrame(self.client.get_orders())
 
@@ -240,13 +262,14 @@ class PolymarketClient:
     
     def get_market_orders(self, market):
         """
-        Get all open orders for a specific market.
-        
+        Retrieves all open orders for a specific market.
+
         Args:
-            market (str): Market ID to query
-            
+            market (str): The ID of the market to query.
+
         Returns:
-            DataFrame: Open orders for the specified market
+            pandas.DataFrame: A DataFrame containing details of open orders for the
+                              specified market.
         """
         orders_df = pd.DataFrame(self.client.get_orders(OpenOrderParams(
             market=market,
@@ -262,10 +285,10 @@ class PolymarketClient:
 
     def cancel_all_asset(self, asset_id):
         """
-        Cancel all orders for a specific asset token.
-        
+        Cancels all open orders for a specific asset token.
+
         Args:
-            asset_id (str): Asset token ID
+            asset_id (str): The asset token ID.
         """
         self.client.cancel_market_orders(asset_id=str(asset_id))
 
@@ -273,10 +296,10 @@ class PolymarketClient:
     
     def cancel_all_market(self, marketId):
         """
-        Cancel all orders in a specific market.
-        
+        Cancels all open orders in a specific market.
+
         Args:
-            marketId (str): Market ID
+            marketId (str): The market ID.
         """
         self.client.cancel_market_orders(market=marketId)
 

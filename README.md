@@ -12,15 +12,23 @@ Poly-Maker is a comprehensive solution for automated market making on Polymarket
 - Automated position merging functionality
 - Sophisticated spread and price management
 
+## How it Works
+
+The bot operates through a main loop that connects to Polymarket's WebSocket APIs for real-time market and user data. A background thread periodically fetches market configurations, positions, and open orders. The core trading logic, found in `trading.py`, analyzes market conditions for each selected market, calculates optimal bid and ask prices, and manages orders. It also includes risk management features like stop-loss and take-profit, and automatically merges opposing positions to free up capital.
+
 ## Structure
 
 The repository consists of several interconnected modules:
 
-- `poly_data`: Core data management and market making logic
-- `poly_merger`: Utility for merging positions (based on open-source Polymarket code)
-- `poly_stats`: Account statistics tracking
-- `poly_utils`: Shared utility functions
-- `data_updater`: Separate module for collecting market information
+- `poly_data`: Core data management and market making logic.
+- `poly_merger`: Utility for merging positions (based on open-source Polymarket code).
+- `poly_stats`: Account statistics tracking.
+- `poly_utils`: Shared utility functions.
+- `data_updater`: Separate module for collecting market information.
+- `main.py`: The main entry point for the application.
+- `trading.py`: Contains the core trading logic.
+- `update_markets.py`: A script to update the market data in the Google Sheet.
+- `update_stats.py`: A script to update the account statistics in the Google Sheet.
 
 ## Requirements
 
@@ -137,20 +145,31 @@ uv run python main.py
 
 The bot is configured via a Google Spreadsheet with several worksheets:
 
-- **Selected Markets**: Markets you want to trade
-- **All Markets**: Database of all markets on Polymarket
-- **Hyperparameters**: Configuration parameters for the trading logic
+- **Selected Markets**: A list of markets you want the bot to trade.
+- **All Markets**: A comprehensive database of all markets on Polymarket, which is updated by `update_markets.py`.
+- **Volatility Markets**: A filtered list of markets from "All Markets" that meet certain volatility criteria.
+- **Hyperparameters**: Configuration parameters for the trading logic, such as stop-loss thresholds, take-profit percentages, and trade sizes.
+- **Summary**: A summary of your current positions, orders, and earnings, which is updated by `update_stats.py`.
 
 
 ## Poly Merger
 
 The `poly_merger` module is a particularly powerful utility that handles position merging on Polymarket. It's built on open-source Polymarket code and provides a smooth way to consolidate positions, reducing gas fees and improving capital efficiency.
 
+## Risk Management
+
+The bot includes the following risk management features:
+
+- **Stop-Loss**: Automatically sells a position if the PnL drops below a configurable threshold and the market spread is tight enough for an efficient exit.
+- **Take-Profit**: Places sell orders at a price calculated to lock in a desired profit percentage.
+- **Volatility Threshold**: Pauses trading on a market if its volatility exceeds a predefined limit.
+- **Position Sizing**: Limits the size of positions to a configurable maximum.
+
 ## Important Notes
 
-- This code interacts with real markets and can potentially lose real money
-- Test thoroughly with small amounts before deploying with significant capital
-- The `data_updater` is technically a separate repository but is included here for convenience
+- This code interacts with real markets and can potentially lose real money.
+- Test thoroughly with small amounts before deploying with significant capital.
+- The `data_updater` is technically a separate repository but is included here for convenience.
 
 ## License
 

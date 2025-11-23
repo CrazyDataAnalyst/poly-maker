@@ -17,17 +17,19 @@ from poly_data.data_utils import get_position, get_order, set_position
 if not os.path.exists('positions/'):
     os.makedirs('positions/')
 
+
 def send_buy_order(order):
     """
-    Create a BUY order for a specific token.
-    
-    This function:
-    1. Cancels any existing orders for the token
-    2. Checks if the order price is within acceptable range
-    3. Creates a new buy order if conditions are met
-    
+    Manages the creation of a BUY order for a specific token.
+
+    This function decides whether to place a new buy order, cancel existing
+    orders, or keep the current orders based on price and size differences.
+    It also includes logic to avoid placing orders that are not financially
+    incentivized or are outside an acceptable price range.
+
     Args:
-        order (dict): Order details including token, price, size, and market parameters
+        order (dict): A dictionary containing order details, including 'token',
+                      'price', 'size', and other market parameters.
     """
     client = global_state.client
 
@@ -81,14 +83,15 @@ def send_buy_order(order):
 
 def send_sell_order(order):
     """
-    Create a SELL order for a specific token.
-    
-    This function:
-    1. Cancels any existing orders for the token
-    2. Creates a new sell order with the specified parameters
-    
+    Manages the creation of a SELL order for a specific token.
+
+    Similar to `send_buy_order`, this function determines whether to place a new
+    sell order, cancel existing ones, or maintain the status quo based on the
+    order details provided.
+
     Args:
-        order (dict): Order details including token, price, size, and market parameters
+        order (dict): A dictionary containing order details, including 'token',
+                      'price', 'size', and other market parameters.
     """
     client = global_state.client
 
@@ -125,18 +128,19 @@ def send_sell_order(order):
 # Dictionary to store locks for each market to prevent concurrent trading on the same market
 market_locks = {}
 
+
 async def perform_trade(market):
     """
-    Main trading function that handles market making for a specific market.
-    
-    This function:
-    1. Merges positions when possible to free up capital
-    2. Analyzes the market to determine optimal bid/ask prices
-    3. Manages buy and sell orders based on position size and market conditions
-    4. Implements risk management with stop-loss and take-profit logic
-    
+    Executes the main trading logic for a specific market.
+
+    This function orchestrates the entire trading process for a market, including:
+    - Position merging to free up collateral.
+    - Market analysis to determine optimal bid/ask prices.
+    - Order management for buying and selling.
+    - Risk management, including stop-loss and take-profit logic.
+
     Args:
-        market (str): The market ID to trade on
+        market (str): The market ID to trade on.
     """
     # Create a lock for this market if it doesn't exist
     if market not in market_locks:

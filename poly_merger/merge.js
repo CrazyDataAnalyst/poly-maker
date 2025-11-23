@@ -58,7 +58,7 @@ const conditionalTokensAbi = [
  * @param {string|number} amountToMerge - Raw amount of tokens to merge (typically expressed in raw units, e.g., 1000000 = 1 USDC)
  * @param {string|number} conditionId - The market's condition ID
  * @param {boolean} isNegRiskMarket - Whether this is a negative risk market (uses different contract)
- * @returns {string} The transaction hash of the merge operation
+ * @returns {Promise<string>} A promise that resolves with the transaction hash of the merge operation.
  */
 async function mergePositions(amountToMerge, conditionId, isNegRiskMarket) {
     // Log parameters for debugging

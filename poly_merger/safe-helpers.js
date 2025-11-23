@@ -1,5 +1,12 @@
 const { BigNumber, ethers } = require('ethers');
 
+
+/**
+ * Joins an array of hexadecimal strings into a single hexadecimal string.
+ *
+ * @param {string[]} hexData - An array of hexadecimal strings.
+ * @returns {string} The combined hexadecimal string.
+ */
 function joinHexData(hexData) {
     return `0x${hexData
         .map(hex => {
@@ -9,6 +16,13 @@ function joinHexData(hexData) {
         .join("")}`;
 }
 
+
+/**
+ * ABI-encodes and packs a list of parameters.
+ *
+ * @param {...{type: string, value: any}} params - The parameters to encode.
+ * @returns {string} The ABI-encoded and packed hexadecimal string.
+ */
 function abiEncodePacked(...params) {
     return joinHexData(
         params.map(({ type, value }) => {
@@ -47,6 +61,14 @@ function abiEncodePacked(...params) {
     );
 }
 
+
+/**
+ * Signs a transaction hash with a given signer.
+ *
+ * @param {ethers.Signer} signer - The signer to use for signing.
+ * @param {string} message - The message (transaction hash) to sign.
+ * @returns {Promise<{r: string, s: string, v: string}>} A promise that resolves with the r, s, and v components of the signature.
+ */
 async function signTransactionHash(signer, message) {
     const messageArray = ethers.utils.arrayify(message);
     let sig = await signer.signMessage(messageArray);
@@ -74,6 +96,17 @@ async function signTransactionHash(signer, message) {
     };
 }
 
+
+/**
+ * Signs and executes a transaction through a Gnosis Safe.
+ *
+ * @param {ethers.Signer} signer - The signer to use for the transaction.
+ * @param {ethers.Contract} safe - The Gnosis Safe contract instance.
+ * @param {string} to - The destination address for the transaction.
+ * @param {string} data - The data payload for the transaction.
+ * @param {object} [overrides={}] - Ethers transaction overrides.
+ * @returns {Promise<ethers.providers.TransactionResponse>} A promise that resolves with the transaction response.
+ */
 async function signAndExecuteSafeTransaction(signer, safe, to, data, overrides = {}) {
     const nonce = await safe.nonce();
     console.log("Nonce for safe: ", nonce);
