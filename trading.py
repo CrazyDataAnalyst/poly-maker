@@ -168,7 +168,7 @@ async def perform_trade(market):
             # ------- POSITION MERGING LOGIC -------
             # Calculate if we have opposing positions that can be merged
             amount_to_merge = min(pos_1, pos_2)
-            
+
             # Only merge if positions are above minimum threshold
             if float(amount_to_merge) > CONSTANTS.MIN_MERGE_SIZE:
                 # Get exact position sizes from blockchain for merging
@@ -176,7 +176,7 @@ async def perform_trade(market):
                 pos_2 = client.get_position(row['token2'])[0]
                 amount_to_merge = min(pos_1, pos_2)
                 scaled_amt = amount_to_merge / 10**6
-                
+
                 if scaled_amt > CONSTANTS.MIN_MERGE_SIZE:
                     print(f"Position 1 is of size {pos_1} and Position 2 is of size {pos_2}. Merging positions")
                     # Execute the merge operation
@@ -184,7 +184,21 @@ async def perform_trade(market):
                     # Update our local position tracking
                     set_position(row['token1'], 'SELL', scaled_amt, 0, 'merge')
                     set_position(row['token2'], 'SELL', scaled_amt, 0, 'merge')
-                    
+
+                    # After merge, handle residuals before re-entering
+                    # Get updated positions after merge
+                    pos_1_after = get_position(row['token1'])['size']
+                    pos_2_after = get_position(row['token2'])['size']
+
+                    # If we have small residuals, try to flatten them first
+                    residual_threshold = row.get('min_size', 20) * 1.5
+                    if pos_1_after > 0 and pos_1_after < residual_threshold:
+                        print(f"Flattening small residual of {pos_1_after} for token1")
+                        client.cancel_all_asset(row['token1'])
+                    if pos_2_after > 0 and pos_2_after < residual_threshold:
+                        print(f"Flattening small residual of {pos_2_after} for token2")
+                        client.cancel_all_asset(row['token2'])
+
             # ------- TRADING LOGIC FOR EACH OUTCOME -------
             # Loop through both outcomes in the market (YES and NO)
             for detail in deets:
@@ -258,9 +272,10 @@ async def perform_trade(market):
                 # Get position for the opposite token to calculate total exposure
                 other_token = global_state.REVERSE_TOKENS[str(token)]
                 other_position = get_position(other_token)['size']
-                
+
                 # Calculate how much to buy or sell based on our position
-                buy_amount, sell_amount = get_buy_sell_amount(position, bid_price, row, other_position)
+                # Pass open buy orders to ensure position + orders <= max_size
+                buy_amount, sell_amount = get_buy_sell_amount(position, bid_price, row, other_position, orders['buy']['size'])
                 
                 # Get max_size for logging (same logic as in get_buy_sell_amount)
                 max_size = row.get('max_size', row['trade_size'])
@@ -295,15 +310,17 @@ async def perform_trade(market):
 
                     # Get fresh market data for risk assessment
                     n_deets = get_best_bid_ask_deets(market, detail['name'], 100, 0.1)
-                    
+
                     # Calculate current market price and spread
                     mid_price = round_up((n_deets['best_bid'] + n_deets['best_ask']) / 2, round_length)
                     spread = round(n_deets['best_ask'] - n_deets['best_bid'], 2)
 
-                    # Calculate current profit/loss on position
-                    pnl = (mid_price - avgPrice) / avgPrice * 100
+                    # Calculate realizable PnL using best_bid (what we can actually sell at)
+                    # This gives more conservative/realistic PnL for longs
+                    realizable_price = n_deets['best_bid']
+                    pnl = (realizable_price - avgPrice) / avgPrice * 100
 
-                    print(f"Mid Price: {mid_price}, Spread: {spread}, PnL: {pnl}")
+                    print(f"Mid Price: {mid_price}, Realizable: {realizable_price}, Spread: {spread}, PnL: {pnl}")
                     
                     # Prepare risk details for tracking
                     risk_details = {
@@ -383,6 +400,13 @@ async def perform_trade(market):
 
                     # Only proceed if we're not in risk-off period
                     if send_buy:
+                        # Check for asymmetric spread - if spread is too wide, cancel everything
+                        spread_check = abs(best_ask - best_bid)
+                        if spread_check > row['max_spread']/100 * 1.2:
+                            print(f'Spread of {spread_check} exceeds threshold. Cancelling all market orders to avoid directional accumulation')
+                            client.cancel_all_market(market)
+                            continue
+
                         # Don't buy if volatility is high or price is far from reference
                         if row['3_hour'] > params['volatility_threshold'] or price_change >= 0.05:
                             print(f'3 Hour Volatility of {row["3_hour"]} is greater than max volatility of '

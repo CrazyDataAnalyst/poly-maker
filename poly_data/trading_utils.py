@@ -149,21 +149,25 @@ def round_up(number, decimals):
     factor = 10 ** decimals
     return math.ceil(number * factor) / factor
 
-def get_buy_sell_amount(position, bid_price, row, other_token_position=0):
+def get_buy_sell_amount(position, bid_price, row, other_token_position=0, open_buy_orders=0):
     buy_amount = 0
     sell_amount = 0
 
     # Get max_size, defaulting to trade_size if not specified
     max_size = row.get('max_size', row['trade_size'])
     trade_size = row['trade_size']
-    
+
     # Calculate total exposure across both sides
     total_exposure = position + other_token_position
-    
+
+    # Calculate exposure accounting: position + open orders must not exceed max_size
+    current_exposure = position + open_buy_orders
+
     # If we haven't reached max_size on either side, continue building
-    if position < max_size:
+    if current_exposure < max_size:
         # Continue quoting trade_size amounts until we reach max_size
-        remaining_to_max = max_size - position
+        # But never exceed max_size even if that makes order smaller than min_size
+        remaining_to_max = max_size - current_exposure
         buy_amount = min(trade_size, remaining_to_max)
         
         # Only sell if we have substantial position (to allow for exit when needed)
