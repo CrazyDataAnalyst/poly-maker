@@ -193,27 +193,30 @@ async def perform_trade(market):
                     min_size = row.get('min_size', 20)
 
                     # Strategy: Post orders at best_bid to buy opposite side (earn incentives)
-                    # Only hit market if residual < CONSTANTS.MIN_MERGE_SIZE
+                    # Buy min(residual, min_size) to avoid creating larger imbalances
+                    # Only hit market if residual <= CONSTANTS.MIN_MERGE_SIZE
                     if pos_1_after > CONSTANTS.MIN_MERGE_SIZE and pos_2_after == 0:
                         # Token1 has significant residual, token2 is empty
-                        # Post order to buy token2 at best_bid (earn LP incentives while waiting)
-                        print(f"Residual of {pos_1_after} on token1. Posting order to buy {min_size} of token2 at best_bid")
+                        # Buy the smaller of: residual or min_size (to avoid overshooting)
+                        buy_size = min(pos_1_after, min_size)
+                        print(f"Residual of {pos_1_after} on token1. Posting order to buy {buy_size} of token2 at best_bid")
                         buy_deets = get_best_bid_ask_deets(market, 'token2', 20, 0.1)
                         if buy_deets['best_bid'] is not None:
                             # Post at best_bid to earn incentives (don't hit ask)
                             client.cancel_all_asset(row['token2'])
-                            client.create_order(row['token2'], 'BUY', buy_deets['best_bid'], min_size,
+                            client.create_order(row['token2'], 'BUY', buy_deets['best_bid'], buy_size,
                                               True if row['neg_risk'] == 'TRUE' else False)
 
                     elif pos_2_after > CONSTANTS.MIN_MERGE_SIZE and pos_1_after == 0:
                         # Token2 has significant residual, token1 is empty
-                        # Post order to buy token1 at best_bid (earn LP incentives while waiting)
-                        print(f"Residual of {pos_2_after} on token2. Posting order to buy {min_size} of token1 at best_bid")
+                        # Buy the smaller of: residual or min_size (to avoid overshooting)
+                        buy_size = min(pos_2_after, min_size)
+                        print(f"Residual of {pos_2_after} on token2. Posting order to buy {buy_size} of token1 at best_bid")
                         buy_deets = get_best_bid_ask_deets(market, 'token1', 20, 0.1)
                         if buy_deets['best_bid'] is not None:
                             # Post at best_bid to earn incentives (don't hit ask)
                             client.cancel_all_asset(row['token1'])
-                            client.create_order(row['token1'], 'BUY', buy_deets['best_bid'], min_size,
+                            client.create_order(row['token1'], 'BUY', buy_deets['best_bid'], buy_size,
                                               True if row['neg_risk'] == 'TRUE' else False)
 
                     elif pos_1_after > 0 and pos_1_after <= CONSTANTS.MIN_MERGE_SIZE and pos_2_after == 0:
