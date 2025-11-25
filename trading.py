@@ -185,40 +185,54 @@ async def perform_trade(market):
                     set_position(row['token1'], 'SELL', scaled_amt, 0, 'merge')
                     set_position(row['token2'], 'SELL', scaled_amt, 0, 'merge')
 
-                    # After merge, handle residuals before re-entering
+                    # After merge, handle residuals intelligently to avoid locking in losses
                     # Get updated positions after merge
                     pos_1_after = get_position(row['token1'])['size']
                     pos_2_after = get_position(row['token2'])['size']
 
-                    # If we have small residuals, actively flatten them at market
-                    residual_threshold = row.get('min_size', 20) * 1.5
-                    has_residual = False
+                    min_size = row.get('min_size', 20)
 
-                    if pos_1_after > 0 and pos_1_after < residual_threshold:
-                        print(f"Actively flattening small residual of {pos_1_after} for token1 at market")
-                        # Cancel existing orders first
-                        client.cancel_all_asset(row['token1'])
-                        # Get current best bid to sell at market
-                        flatten_deets = get_best_bid_ask_deets(market, 'token1', 20, 0.1)
-                        if flatten_deets['best_bid'] is not None:
-                            # Sell at best bid to ensure immediate execution
-                            client.create_order(row['token1'], 'SELL', flatten_deets['best_bid'], pos_1_after,
-                                              True if row['neg_risk'] == 'TRUE' else False)
-                        has_residual = True
+                    # Strategy: Try to buy opposite side to enable another merge
+                    # Only flatten very small residuals (< min_size) at market
+                    if pos_1_after > 0 and pos_2_after == 0:
+                        # Token1 has residual, token2 is empty
+                        if pos_1_after >= min_size:
+                            # Try to buy token2 to merge (instead of selling token1 at loss)
+                            print(f"Residual of {pos_1_after} on token1. Trying to buy {min_size} of token2 to merge")
+                            buy_deets = get_best_bid_ask_deets(market, 'token2', 20, 0.1)
+                            if buy_deets['best_ask'] is not None:
+                                # Buy token2 at best_ask to enable merge
+                                client.cancel_all_asset(row['token2'])
+                                client.create_order(row['token2'], 'BUY', buy_deets['best_ask'], min_size,
+                                                  True if row['neg_risk'] == 'TRUE' else False)
+                        else:
+                            # Very small residual (< min_size), flatten at market
+                            print(f"Very small residual of {pos_1_after} on token1. Flattening at market")
+                            client.cancel_all_asset(row['token1'])
+                            flatten_deets = get_best_bid_ask_deets(market, 'token1', 20, 0.1)
+                            if flatten_deets['best_bid'] is not None:
+                                client.create_order(row['token1'], 'SELL', flatten_deets['best_bid'], pos_1_after,
+                                                  True if row['neg_risk'] == 'TRUE' else False)
 
-                    if pos_2_after > 0 and pos_2_after < residual_threshold:
-                        print(f"Actively flattening small residual of {pos_2_after} for token2 at market")
-                        client.cancel_all_asset(row['token2'])
-                        flatten_deets = get_best_bid_ask_deets(market, 'token2', 20, 0.1)
-                        if flatten_deets['best_bid'] is not None:
-                            client.create_order(row['token2'], 'SELL', flatten_deets['best_bid'], pos_2_after,
-                                              True if row['neg_risk'] == 'TRUE' else False)
-                        has_residual = True
-
-                    # If we're flattening residuals, skip re-entry this iteration
-                    if has_residual:
-                        print("Skipping market re-entry until residuals are flattened")
-                        continue
+                    elif pos_2_after > 0 and pos_1_after == 0:
+                        # Token2 has residual, token1 is empty
+                        if pos_2_after >= min_size:
+                            # Try to buy token1 to merge (instead of selling token2 at loss)
+                            print(f"Residual of {pos_2_after} on token2. Trying to buy {min_size} of token1 to merge")
+                            buy_deets = get_best_bid_ask_deets(market, 'token1', 20, 0.1)
+                            if buy_deets['best_ask'] is not None:
+                                # Buy token1 at best_ask to enable merge
+                                client.cancel_all_asset(row['token1'])
+                                client.create_order(row['token1'], 'BUY', buy_deets['best_ask'], min_size,
+                                                  True if row['neg_risk'] == 'TRUE' else False)
+                        else:
+                            # Very small residual (< min_size), flatten at market
+                            print(f"Very small residual of {pos_2_after} on token2. Flattening at market")
+                            client.cancel_all_asset(row['token2'])
+                            flatten_deets = get_best_bid_ask_deets(market, 'token2', 20, 0.1)
+                            if flatten_deets['best_bid'] is not None:
+                                client.create_order(row['token2'], 'SELL', flatten_deets['best_bid'], pos_2_after,
+                                                  True if row['neg_risk'] == 'TRUE' else False)
 
             # ------- TRADING LOGIC FOR EACH OUTCOME -------
             # Loop through both outcomes in the market (YES and NO)
