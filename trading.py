@@ -196,6 +196,9 @@ async def perform_trade(market):
                     # Always buy min_size to qualify for LP rewards (even if creates cycle)
                     # The cycle is profitable as long as we earn LP rewards on each order
                     # Only hit market if residual <= CONSTANTS.MIN_MERGE_SIZE
+
+                    # IMPORTANT: When handling residuals, skip normal trading logic to avoid
+                    # conflicting orders that could exceed max_size exposure limits
                     if pos_1_after > CONSTANTS.MIN_MERGE_SIZE and pos_2_after == 0:
                         # Token1 has significant residual, token2 is empty
                         # Post min_size order to qualify for LP incentives
@@ -206,6 +209,9 @@ async def perform_trade(market):
                             client.cancel_all_asset(row['token2'])
                             client.create_order(row['token2'], 'BUY', buy_deets['best_bid'], min_size,
                                               True if row['neg_risk'] == 'TRUE' else False)
+                        # Skip normal trading this iteration to avoid exceeding max_size
+                        print("Skipping normal trading logic - handling residuals")
+                        return
 
                     elif pos_2_after > CONSTANTS.MIN_MERGE_SIZE and pos_1_after == 0:
                         # Token2 has significant residual, token1 is empty
@@ -217,6 +223,9 @@ async def perform_trade(market):
                             client.cancel_all_asset(row['token1'])
                             client.create_order(row['token1'], 'BUY', buy_deets['best_bid'], min_size,
                                               True if row['neg_risk'] == 'TRUE' else False)
+                        # Skip normal trading this iteration to avoid exceeding max_size
+                        print("Skipping normal trading logic - handling residuals")
+                        return
 
                     elif pos_1_after > 0 and pos_1_after <= CONSTANTS.MIN_MERGE_SIZE and pos_2_after == 0:
                         # Very small residual on token1 (< MIN_MERGE_SIZE), hit market to flatten quickly
@@ -226,6 +235,9 @@ async def perform_trade(market):
                         if flatten_deets['best_bid'] is not None:
                             client.create_order(row['token1'], 'SELL', flatten_deets['best_bid'], pos_1_after,
                                               True if row['neg_risk'] == 'TRUE' else False)
+                        # Skip normal trading this iteration
+                        print("Skipping normal trading logic - flattening small residual")
+                        return
 
                     elif pos_2_after > 0 and pos_2_after <= CONSTANTS.MIN_MERGE_SIZE and pos_1_after == 0:
                         # Very small residual on token2 (< MIN_MERGE_SIZE), hit market to flatten quickly
@@ -235,6 +247,9 @@ async def perform_trade(market):
                         if flatten_deets['best_bid'] is not None:
                             client.create_order(row['token2'], 'SELL', flatten_deets['best_bid'], pos_2_after,
                                               True if row['neg_risk'] == 'TRUE' else False)
+                        # Skip normal trading this iteration
+                        print("Skipping normal trading logic - flattening small residual")
+                        return
 
             # ------- TRADING LOGIC FOR EACH OUTCOME -------
             # Loop through both outcomes in the market (YES and NO)
