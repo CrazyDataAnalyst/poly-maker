@@ -190,14 +190,35 @@ async def perform_trade(market):
                     pos_1_after = get_position(row['token1'])['size']
                     pos_2_after = get_position(row['token2'])['size']
 
-                    # If we have small residuals, try to flatten them first
+                    # If we have small residuals, actively flatten them at market
                     residual_threshold = row.get('min_size', 20) * 1.5
+                    has_residual = False
+
                     if pos_1_after > 0 and pos_1_after < residual_threshold:
-                        print(f"Flattening small residual of {pos_1_after} for token1")
+                        print(f"Actively flattening small residual of {pos_1_after} for token1 at market")
+                        # Cancel existing orders first
                         client.cancel_all_asset(row['token1'])
+                        # Get current best bid to sell at market
+                        flatten_deets = get_best_bid_ask_deets(market, 'token1', 20, 0.1)
+                        if flatten_deets['best_bid'] is not None:
+                            # Sell at best bid to ensure immediate execution
+                            client.create_order(row['token1'], 'SELL', flatten_deets['best_bid'], pos_1_after,
+                                              True if row['neg_risk'] == 'TRUE' else False)
+                        has_residual = True
+
                     if pos_2_after > 0 and pos_2_after < residual_threshold:
-                        print(f"Flattening small residual of {pos_2_after} for token2")
+                        print(f"Actively flattening small residual of {pos_2_after} for token2 at market")
                         client.cancel_all_asset(row['token2'])
+                        flatten_deets = get_best_bid_ask_deets(market, 'token2', 20, 0.1)
+                        if flatten_deets['best_bid'] is not None:
+                            client.create_order(row['token2'], 'SELL', flatten_deets['best_bid'], pos_2_after,
+                                              True if row['neg_risk'] == 'TRUE' else False)
+                        has_residual = True
+
+                    # If we're flattening residuals, skip re-entry this iteration
+                    if has_residual:
+                        print("Skipping market re-entry until residuals are flattened")
+                        continue
 
             # ------- TRADING LOGIC FOR EACH OUTCOME -------
             # Loop through both outcomes in the market (YES and NO)
