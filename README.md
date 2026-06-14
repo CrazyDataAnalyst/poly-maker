@@ -204,6 +204,25 @@ ready-to-import `Hyperparameters` sheet in
 - **VPIN feed is an order-flow proxy** (top-of-book consumption), not true trade
   prints; subscribing to the market trade channel would sharpen it.
 
+## Backtesting & Forward-Testing
+
+`poly_backtest/` validates the engine offline (historical replay) and live (paper
+trading), computing PnL, Sharpe, Sortino, and drawdown from a shared simulation
+core — so backtest and live-paper results are directly comparable. See
+[`BACKTESTING.md`](BACKTESTING.md) for the full methodology and fill-model caveats.
+
+```bash
+# Synthetic sanity check (no data needed)
+python run_backtest.py --mode synthetic --steps 8000 --gamma 2
+
+# Historical CSV (e.g. github.com/warproxxx/poly_data) — map your columns
+python run_backtest.py --mode csv --book book.csv --trades trades.csv \
+    --book-cols ts=t,token=asset,bid=best_bid,ask=best_ask --outcome YES=1
+
+# Forward-test on LIVE data, read-only, never places orders
+python paper_trade.py --tokens <token1>,<token2>
+```
+
 ## Poly Merger
 
 The `poly_merger` module is a particularly powerful utility that handles position merging on Polymarket. It's built on open-source Polymarket code and provides a smooth way to consolidate positions, reducing gas fees and improving capital efficiency.
