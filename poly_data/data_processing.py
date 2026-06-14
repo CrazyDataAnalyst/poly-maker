@@ -4,9 +4,22 @@ import poly_data.global_state as global_state
 import poly_data.CONSTANTS as CONSTANTS
 
 from trading import perform_trade
-import time 
+import time
 import asyncio
 from poly_data.data_utils import set_position, set_order, update_positions
+
+
+def _feed_toxicity(token, buy_volume, sell_volume):
+    """Forward inferred order-flow to the strategy engine's VPIN estimator.
+
+    Imported lazily and wrapped so the legacy data path has no hard dependency on
+    the strategy package and never breaks if it is absent.
+    """
+    try:
+        from poly_data import strategy_adapter
+        strategy_adapter.feed_flow(token, buy_volume, sell_volume)
+    except Exception:
+        pass
 
 def process_book_data(asset, j):
     global_state.all_data[asset] = {
@@ -23,14 +36,32 @@ def process_price_change(asset, asset_id, side, price_level, new_size):
     if asset not in global_state.all_data:
         return  # Asset not initialized yet
     stored_asset_id = global_state.all_data[asset].get('asset_id')
-    
+
     if stored_asset_id and asset_id != stored_asset_id:
         return  # Skip updates for the No token to prevent duplicated updates
-        
+
     if side == 'bids':
         book = global_state.all_data[asset]['bids']
     else:
         book = global_state.all_data[asset]['asks']
+
+    # ---- Toxicity (VPIN) feed: infer executed volume from top-of-book consumption.
+    # A shrinking resting size at the *best* price almost always means it was
+    # traded into (vs. a cancel deeper in the book). Bid consumption = sell flow;
+    # ask consumption = buy flow. This is the order-flow proxy the VPIN estimator
+    # consumes, since this repo's market websocket does not expose trade prints.
+    try:
+        old_size = book.get(price_level, 0.0)
+        if new_size < old_size and len(book) > 0:
+            best_price = book.keys()[-1] if side == 'bids' else book.keys()[0]
+            if abs(price_level - best_price) < 1e-9:
+                consumed = old_size - new_size
+                if side == 'bids':
+                    _feed_toxicity(asset_id, buy_volume=0.0, sell_volume=consumed)
+                else:
+                    _feed_toxicity(asset_id, buy_volume=consumed, sell_volume=0.0)
+    except Exception:
+        pass
 
     if new_size == 0:
         if price_level in book:
