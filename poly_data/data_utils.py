@@ -156,8 +156,19 @@ def update_markets():
         for col in ['token1', 'token2']:
             row[col] = str(row[col])
 
+        # Subscribe BOTH outcome tokens on the market websocket so we track each
+        # token's real order book (needed for cross-token arbitrage and accurate
+        # second-outcome quoting). token1 remains the primary book for legacy code.
         if row['token1'] not in global_state.all_tokens:
             global_state.all_tokens.append(row['token1'])
+
+        if row['token2'] not in global_state.all_tokens:
+            global_state.all_tokens.append(row['token2'])
+
+        # Record the primary token for this market (keeps legacy all_data[market]
+        # pinned to token1 even though token2 events now also arrive).
+        if 'condition_id' in row:
+            global_state.MARKET_TOKEN1[str(row['condition_id'])] = row['token1']
 
         if row['token1'] not in global_state.REVERSE_TOKENS:
             global_state.REVERSE_TOKENS[row['token1']] = row['token2']

@@ -93,8 +93,15 @@ def build_snapshot(
     avg_price: float,
     row_dict: Dict[str, Any],
     seconds_per_update: float = 5.0,
+    other_best_ask: Optional[float] = None,
+    other_best_bid: Optional[float] = None,
 ) -> MarketSnapshot:
-    """Translate get_best_bid_ask_deets output + position into a MarketSnapshot."""
+    """Translate order-book deets + position into a MarketSnapshot.
+
+    ``other_best_ask`` / ``other_best_bid`` are the *opposite* outcome token's real
+    best prices, used for cross-token Dutch-book arbitrage detection. Pass None
+    when the opposite book is unavailable so the detector cannot false-fire.
+    """
     # Use the 3-hour annualized vol from the sheet as the slow volatility prior.
     sheet_vol = 0.0
     for col in ("3_hour", "6_hour", "1_hour", "24_hour"):
@@ -118,11 +125,8 @@ def build_snapshot(
         hours_to_resolution=_hours_to_resolution(row_dict),
         sheet_annual_vol=sheet_vol,
         seconds_per_update=seconds_per_update,
-        # Real cross-token Dutch-book arb requires subscribing to the opposite
-        # token's book (this repo only tracks the YES book). Left None so the
-        # detector never false-fires on a synthetic NO book; see README/next steps.
-        other_best_ask=None,
-        other_best_bid=None,
+        other_best_ask=other_best_ask,
+        other_best_bid=other_best_bid,
     )
 
 

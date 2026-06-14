@@ -110,6 +110,12 @@ class StrategyConfig:
                 return default
 
         d = cls()  # defaults
+
+        # Order sizes live in the per-market sheet columns (trade_size / max_size);
+        # allow a Hyperparameters override but fall back to the row, then defaults.
+        base_size = _get(params, "base_order_size", row_get("trade_size", d.base_order_size))
+        max_size = _get(params, "max_order_size", row_get("max_size", d.max_order_size))
+
         return cls(
             gamma=_get(params, "gamma", d.gamma),
             kappa=_get(params, "kappa", d.kappa),
@@ -119,9 +125,9 @@ class StrategyConfig:
             max_loss_usd=_get(params, "max_loss_usd", d.max_loss_usd),
             target_inventory=_get(params, "target_inventory", d.target_inventory),
             inventory_skew_cap=_get(params, "inventory_skew_cap", d.inventory_skew_cap),
-            base_order_size=_get(params, "trade_size", _get(params, "base_order_size", d.base_order_size)),
+            base_order_size=base_size,
             kelly_fraction=_get(params, "kelly_fraction", d.kelly_fraction),
-            max_order_size=_get(params, "max_size", _get(params, "max_order_size", d.max_order_size)),
+            max_order_size=max_size,
             vol_ewma_lambda=_get(params, "vol_ewma_lambda", d.vol_ewma_lambda),
             vol_floor=_get(params, "vol_floor", d.vol_floor),
             sheet_vol_weight=_get(params, "sheet_vol_weight", d.sheet_vol_weight),

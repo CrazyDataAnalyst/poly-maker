@@ -183,13 +183,24 @@ inventory limit `Q`), `min_half_spread`, `max_half_spread`, `kelly_fraction`,
 are reused automatically. See `poly_strategy/config.py` for the full list and
 defaults.
 
-### Known limitations / next steps
+### Configuration template
 
-- **Intra-market Dutch-book arb is dormant**: the data layer only subscribes to
-  the YES book and derives NO synthetically, so the detector (fully implemented
-  and tested) won't fire live until both outcome books are subscribed.
-- **Staged resolution withdrawal needs an end date**: it activates only when the
-  market row carries `end_date_iso`; add that column in `data_updater` to enable.
+A full description of every worksheet and parameter (legacy + engine) lives in
+[`templates/SPREADSHEET_TEMPLATE.md`](templates/SPREADSHEET_TEMPLATE.md), with a
+ready-to-import `Hyperparameters` sheet in
+[`templates/hyperparameters_template.csv`](templates/hyperparameters_template.csv).
+
+### Active features & remaining limitations
+
+- **Cross-token Dutch-book arbitrage is active**: both outcome tokens are now
+  subscribed and each token's real order book is tracked, so the detector fires
+  on genuine `P(YES)+P(NO) != 1` dislocations. Detected opportunities are logged;
+  *automatic execution* of the two legs is intentionally not enabled (it moves
+  real capital and needs atomic dual-leg handling) — that's the next step.
+- **Staged resolution withdrawal is active when `end_date_iso` is present**:
+  re-run `python update_markets.py` after upgrading so that column is written to
+  the All Markets sheet. Without it the bot can't know expiry and skips the
+  withdrawal layer.
 - **VPIN feed is an order-flow proxy** (top-of-book consumption), not true trade
   prints; subscribing to the market trade channel would sharpen it.
 

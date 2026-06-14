@@ -11,7 +11,7 @@ import poly_data.CONSTANTS as CONSTANTS
 import poly_data.strategy_adapter as sa
 
 # Import utility functions for trading
-from poly_data.trading_utils import get_best_bid_ask_deets, get_order_prices, get_buy_sell_amount, round_down, round_up
+from poly_data.trading_utils import get_best_bid_ask_deets, get_order_prices, get_buy_sell_amount, round_down, round_up, get_token_best_bid_ask
 from poly_data.data_utils import get_position, get_order, set_position
 
 # Create directory for storing position risk information
@@ -586,17 +586,31 @@ async def run_engine_outcomes(market, row, params, round_length):
         token = int(detail['token'])
 
         existing = get_order(token)
-        deets = get_best_bid_ask_deets(market, detail['name'], 100, 0.1)
-        if (deets['best_bid'] is None or deets['best_ask'] is None
-                or deets['best_bid_size'] is None or deets['best_ask_size'] is None):
-            deets = get_best_bid_ask_deets(market, detail['name'], 20, 0.1)
+
+        # Prefer this token's REAL book; fall back to the legacy derivation if its
+        # book hasn't been received yet.
+        deets = get_token_best_bid_ask(detail['token'], 20)
+        if deets is None or deets['best_bid'] is None or deets['best_ask'] is None:
+            deets = get_best_bid_ask_deets(market, detail['name'], 100, 0.1)
+            if (deets['best_bid'] is None or deets['best_ask'] is None
+                    or deets['best_bid_size'] is None or deets['best_ask_size'] is None):
+                deets = get_best_bid_ask_deets(market, detail['name'], 20, 0.1)
+
+        # Opposite outcome's real best prices for cross-token Dutch-book arb.
+        other_token = global_state.REVERSE_TOKENS.get(str(detail['token']))
+        other_deets = get_token_best_bid_ask(other_token, 20) if other_token else None
+        other_best_ask = other_deets['best_ask'] if other_deets else None
+        other_best_bid = other_deets['best_bid'] if other_deets else None
 
         pos = get_position(token)
         position = round_down(pos['size'], 2)
         avg_price = pos['avgPrice']
 
         sa.mark_book_update(detail['token'])
-        snapshot = sa.build_snapshot(detail['token'], deets, position, avg_price, row_dict)
+        snapshot = sa.build_snapshot(
+            detail['token'], deets, position, avg_price, row_dict,
+            other_best_ask=other_best_ask, other_best_bid=other_best_bid,
+        )
         decision = sa.compute(detail['token'], snapshot, cfg)
 
         print(f"[engine] {detail['answer']}: fair={decision.fair_value:.4f} "

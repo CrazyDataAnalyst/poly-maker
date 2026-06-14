@@ -298,6 +298,27 @@ def test_quoter_stops_buying_at_inventory_limit():
     assert "long_limit" in d.reasons
 
 
+def test_config_reads_sizes_from_row():
+    # trade_size/max_size live in the market row, not Hyperparameters.
+    cfg = StrategyConfig.from_params(
+        params={"use_strategy_engine": 1, "gamma": 3.0},
+        row={"trade_size": 35, "max_size": 400, "tick_size": 0.01, "max_spread": 2.5},
+    )
+    assert cfg.base_order_size == 35
+    assert cfg.max_order_size == 400
+    assert cfg.gamma == 3.0
+    assert cfg.tick_size == 0.01
+    assert cfg.reward_max_spread == 2.5
+
+
+def test_config_param_overrides_row_size():
+    cfg = StrategyConfig.from_params(
+        params={"base_order_size": 50},
+        row={"trade_size": 35},
+    )
+    assert cfg.base_order_size == 50
+
+
 def test_quoter_detects_arb_in_decision():
     q = Quoter(StrategyConfig())
     snap = _warm_snapshot(position=40.0, best_ask=0.45, other_best_ask=0.50)

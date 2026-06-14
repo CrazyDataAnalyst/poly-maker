@@ -21,53 +21,79 @@ def _feed_toxicity(token, buy_volume, sell_volume):
     except Exception:
         pass
 
+def _is_primary(asset, asset_id):
+    """True if asset_id is the market's primary (token1) book, or unknown."""
+    primary = global_state.MARKET_TOKEN1.get(asset)
+    return primary is None or str(asset_id) == str(primary)
+
+
 def process_book_data(asset, j):
-    global_state.all_data[asset] = {
-        'asset_id': j.get('asset_id'),  # token_id for the Yes token
-        'bids': SortedDict(),
-        'asks': SortedDict()
-    }
+    asset_id = j.get('asset_id')
+    bids = j.get('bids', [])
+    asks = j.get('asks', [])
 
-    global_state.all_data[asset]['bids'].update({float(entry['price']): float(entry['size']) for entry in j.get('bids',[])})
-    global_state.all_data[asset]['asks'].update({float(entry['price']): float(entry['size']) for entry in j.get('asks',[])})
+    # Always store the real per-token book (used by the engine for both outcomes
+    # and for cross-token arbitrage detection).
+    token_book = {'bids': SortedDict(), 'asks': SortedDict()}
+    token_book['bids'].update({float(e['price']): float(e['size']) for e in bids})
+    token_book['asks'].update({float(e['price']): float(e['size']) for e in asks})
+    global_state.all_token_data[str(asset_id)] = token_book
 
-def process_price_change(asset, asset_id, side, price_level, new_size):
-    # Check if this asset_id matches what we stored (to avoid duplicate updates)
-    if asset not in global_state.all_data:
-        return  # Asset not initialized yet
-    stored_asset_id = global_state.all_data[asset].get('asset_id')
+    # Keep the legacy market book pinned to the primary (token1) book only, so the
+    # existing get_best_bid_ask_deets derivation (NO = 1 - YES) is unchanged.
+    if _is_primary(asset, asset_id):
+        global_state.all_data[asset] = {
+            'asset_id': asset_id,
+            'bids': SortedDict(),
+            'asks': SortedDict(),
+        }
+        global_state.all_data[asset]['bids'].update({float(e['price']): float(e['size']) for e in bids})
+        global_state.all_data[asset]['asks'].update({float(e['price']): float(e['size']) for e in asks})
 
-    if stored_asset_id and asset_id != stored_asset_id:
-        return  # Skip updates for the No token to prevent duplicated updates
 
-    if side == 'bids':
-        book = global_state.all_data[asset]['bids']
-    else:
-        book = global_state.all_data[asset]['asks']
+def _apply_change(book_dict, side, price_level, new_size, feed_token):
+    """Apply one price-level change to a book dict, optionally feeding VPIN.
 
-    # ---- Toxicity (VPIN) feed: infer executed volume from top-of-book consumption.
-    # A shrinking resting size at the *best* price almost always means it was
-    # traded into (vs. a cancel deeper in the book). Bid consumption = sell flow;
-    # ask consumption = buy flow. This is the order-flow proxy the VPIN estimator
-    # consumes, since this repo's market websocket does not expose trade prints.
-    try:
-        old_size = book.get(price_level, 0.0)
-        if new_size < old_size and len(book) > 0:
-            best_price = book.keys()[-1] if side == 'bids' else book.keys()[0]
-            if abs(price_level - best_price) < 1e-9:
-                consumed = old_size - new_size
-                if side == 'bids':
-                    _feed_toxicity(asset_id, buy_volume=0.0, sell_volume=consumed)
-                else:
-                    _feed_toxicity(asset_id, buy_volume=consumed, sell_volume=0.0)
-    except Exception:
-        pass
+    Toxicity (VPIN) feed: a shrinking resting size at the *best* price almost
+    always means it was traded into (vs. a cancel deeper in the book). Bid
+    consumption = sell flow; ask consumption = buy flow. This is the order-flow
+    proxy the VPIN estimator consumes, since this repo's market websocket does not
+    expose trade prints.
+    """
+    book = book_dict['bids'] if side == 'bids' else book_dict['asks']
+
+    if feed_token is not None:
+        try:
+            old_size = book.get(price_level, 0.0)
+            if new_size < old_size and len(book) > 0:
+                best_price = book.keys()[-1] if side == 'bids' else book.keys()[0]
+                if abs(price_level - best_price) < 1e-9:
+                    consumed = old_size - new_size
+                    if side == 'bids':
+                        _feed_toxicity(feed_token, buy_volume=0.0, sell_volume=consumed)
+                    else:
+                        _feed_toxicity(feed_token, buy_volume=consumed, sell_volume=0.0)
+        except Exception:
+            pass
 
     if new_size == 0:
         if price_level in book:
             del book[price_level]
     else:
         book[price_level] = new_size
+
+
+def process_price_change(asset, asset_id, side, price_level, new_size):
+    # Update the real per-token book (feeds VPIN off this token's flow).
+    token_book = global_state.all_token_data.get(str(asset_id))
+    if token_book is not None:
+        _apply_change(token_book, side, price_level, new_size, feed_token=str(asset_id))
+
+    # Update the legacy market book only for the primary (token1) token.
+    if asset in global_state.all_data:
+        stored_asset_id = global_state.all_data[asset].get('asset_id')
+        if stored_asset_id and str(asset_id) == str(stored_asset_id):
+            _apply_change(global_state.all_data[asset], side, price_level, new_size, feed_token=None)
 
 def process_data(json_data, trade=True):
     
@@ -79,12 +105,18 @@ def process_data(json_data, trade=True):
         asset = j.get('market')
         asset_id = j.get('asset_id')
 
+        # Both outcome tokens are subscribed, but a single perform_trade(market)
+        # call already processes both outcomes. Trigger only on primary (token1)
+        # events so quote-trigger frequency matches the legacy single-subscription
+        # behaviour; token2 events still update the stored book for the next pass.
+        primary = _is_primary(asset, asset_id)
+
         if event_type == 'book':
             process_book_data(asset, j)
 
-            if trade:
+            if trade and primary:
                 asyncio.create_task(perform_trade(asset))
-                
+
         elif event_type == 'price_change':
             price_changes = j.get('price_changes')
             if not isinstance(price_changes, list):
@@ -95,7 +127,7 @@ def process_data(json_data, trade=True):
                 new_size = float(data.get('size'))
                 process_price_change(asset, asset_id, side, price_level, new_size)
 
-                if trade:
+                if trade and primary:
                     asyncio.create_task(perform_trade(asset))
         
 

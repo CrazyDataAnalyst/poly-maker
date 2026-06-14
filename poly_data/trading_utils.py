@@ -80,6 +80,33 @@ def get_best_bid_ask_deets(market, name, size, deviation_threshold=0.05):
     }
 
 
+def get_token_best_bid_ask(token, size=20):
+    """Best bid/ask (and sizes) from a token's *real* order book.
+
+    Reads global_state.all_token_data[token], which holds the actual book for the
+    token (not the 1-price derivation get_best_bid_ask_deets uses for token2).
+    Returns None if the token's book has not been received yet.
+    """
+    token = str(token)
+    data = global_state.all_token_data.get(token)
+    if not data:
+        return None
+
+    best_bid, best_bid_size, second_best_bid, second_best_bid_size, top_bid = \
+        find_best_price_with_size(data['bids'], size, reverse=True)
+    best_ask, best_ask_size, second_best_ask, second_best_ask_size, top_ask = \
+        find_best_price_with_size(data['asks'], size, reverse=False)
+
+    return {
+        'best_bid': best_bid,
+        'best_bid_size': best_bid_size,
+        'best_ask': best_ask,
+        'best_ask_size': best_ask_size,
+        'top_bid': top_bid,
+        'top_ask': top_ask,
+    }
+
+
 def find_best_price_with_size(price_dict, min_size, reverse=False):
     lst = list(price_dict.items())
 
