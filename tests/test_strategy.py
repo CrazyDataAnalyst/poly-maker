@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from poly_strategy import MarketSnapshot, Quoter, StrategyConfig
 from poly_strategy import avellaneda, inventory, rewards
+from poly_strategy.execution import is_passive_quote
 from poly_strategy.arbitrage import detect_binary_arb, detect_multi_outcome_arb
 from poly_strategy.fair_value import FairValueEstimator
 from poly_strategy.math_utils import inv_logit, logit, norm_cdf, prob_to_logit_slope
@@ -317,6 +318,51 @@ def test_config_param_overrides_row_size():
         row={"trade_size": 35},
     )
     assert cfg.base_order_size == 50
+
+
+def test_passive_quote_guard():
+    # BUY must sit >= 1 tick below the ask; SELL >= 1 tick above the bid.
+    assert is_passive_quote("BUY", 0.49, 0.49, 0.51, 0.01) is True
+    assert is_passive_quote("BUY", 0.51, 0.49, 0.51, 0.01) is False   # crosses ask
+    assert is_passive_quote("SELL", 0.51, 0.49, 0.51, 0.01) is True
+    assert is_passive_quote("SELL", 0.49, 0.49, 0.51, 0.01) is False  # crosses bid
+    assert is_passive_quote("BUY", None, 0.49, 0.51, 0.01) is False
+
+
+def test_quoter_quotes_are_passive():
+    # The engine's own quotes must never be marketable.
+    q = Quoter(StrategyConfig())
+    for _ in range(5):
+        d = q.compute(_warm_snapshot(position=40.0))
+    if d.bid_price is not None:
+        assert d.bid_price < d.fair_value
+        assert is_passive_quote("BUY", d.bid_price, 0.49, 0.51, 0.01)
+    if d.ask_price is not None:
+        assert d.ask_price > d.fair_value
+
+
+def test_quoter_reports_reward_scores():
+    q = Quoter(StrategyConfig())
+    for _ in range(5):
+        d = q.compute(_warm_snapshot(position=40.0))
+    # Quotes near the mid should be reward-eligible and two-sided.
+    assert d.bid_reward_score > 0.0
+    assert d.ask_reward_score > 0.0
+    assert d.reward_two_sided is True
+
+
+def test_quoter_vpin_widens_before_kill():
+    # Moderate one-sided flow lifts VPIN into the widen band -> spread_multiplier>1
+    # without fully withdrawing.
+    cfg = StrategyConfig(vpin_bucket_size=50.0, vpin_num_buckets=10,
+                         vpin_widen_threshold=0.30, vpin_kill_threshold=0.95)
+    q = Quoter(cfg)
+    for i in range(1500):
+        q.on_trade("T", price=0.50 + 0.0002 * i, volume=5.0)
+    d = q.compute(_warm_snapshot(position=40.0))
+    assert d.vpin > 0.30
+    assert d.spread_multiplier > 1.0
+    assert any("vpin_widen" in r for r in d.reasons)
 
 
 def test_quoter_detects_arb_in_decision():

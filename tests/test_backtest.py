@@ -18,6 +18,7 @@ from poly_backtest import BacktestRunner, Ledger, MakerFillModel
 from poly_backtest.events import BookUpdate, Trade
 from poly_backtest.metrics import compute_metrics, max_drawdown, sharpe
 from poly_backtest.data_sources import synthetic_market
+from poly_stats.pnl_attribution import PnLAttribution
 from poly_strategy import StrategyConfig
 
 
@@ -148,6 +149,37 @@ def test_synthetic_backtest_deterministic():
                            sample_interval_s=30.0)
         return r.run(events).metrics.total_pnl
     assert abs(run() - run()) < 1e-9
+
+
+# ------------------------------------------------------------------- pnl attribution
+
+def test_attribution_spread_buy_below_reservation():
+    a = PnLAttribution()
+    # Bought 100 @ 0.48 while reservation was 0.50 => +0.02 * 100 = +2 spread.
+    a.record_fill("buy", 100, 0.48, reservation=0.50)
+    assert abs(a.spread_pnl - 2.0) < 1e-9
+    assert a.num_fills == 1
+
+
+def test_attribution_spread_sell_above_reservation():
+    a = PnLAttribution()
+    a.record_fill("sell", 100, 0.52, reservation=0.50)
+    assert abs(a.spread_pnl - 2.0) < 1e-9
+
+
+def test_attribution_rebates_and_total():
+    a = PnLAttribution(rebate_rate=0.01)
+    a.record_fill("buy", 100, 0.50, reservation=0.50)  # spread 0, notional 50
+    assert abs(a.rebates - 0.5) < 1e-9                 # 50 * 0.01
+    a.add_rewards(3.0)
+    assert abs(a.total - (0.0 + 0.5 + 3.0)) < 1e-9
+
+
+def test_attribution_adverse_fill_is_negative():
+    a = PnLAttribution()
+    # Bought above reservation (picked off) => negative spread.
+    a.record_fill("buy", 100, 0.55, reservation=0.50)
+    assert a.spread_pnl < 0
 
 
 # ------------------------------------------------------------------- runner

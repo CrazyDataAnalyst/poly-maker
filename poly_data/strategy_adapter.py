@@ -20,24 +20,59 @@ from typing import Any, Dict, Optional
 import pandas as pd
 
 from poly_strategy import MarketSnapshot, Quoter, StrategyConfig
+from poly_stats.pnl_attribution import PnLAttribution
 
 # Process-wide engine. Estimator state (fair value, vol, VPIN) is keyed by token
 # inside the Quoter, so a single instance serves every market.
 ENGINE = Quoter()
 
+# Realized-PnL attribution (spread / rebates / rewards), process-wide.
+ATTRIBUTOR = PnLAttribution()
+
 # Last time we received a book update for each token (for staleness checks).
 _last_book_ts: Dict[str, float] = {}
 
+# Last reservation/fair the engine produced per token, for fill attribution.
+_last_reservation: Dict[str, float] = {}
+
 
 def is_enabled(params: Optional[Dict[str, Any]]) -> bool:
-    """True if the strategy engine is switched on for this param-type."""
+    """True if the strategy engine is on for this param-type (now the default).
+
+    The engine is the only quoting path in v2; this remains as an explicit
+    off-switch (set ``use_strategy_engine = 0`` to disable quoting a param-type).
+    """
     if not params:
-        return False
-    val = params.get("use_strategy_engine", 0)
+        return True
+    val = params.get("use_strategy_engine", 1)
+    if val == "" or val is None:
+        return True
     try:
         return float(val) >= 1.0
     except (TypeError, ValueError):
         return str(val).strip().lower() in ("true", "yes", "on")
+
+
+def note_decision(token: str, decision) -> None:
+    """Stash the engine's reservation price so fills can be attributed to spread."""
+    _last_reservation[str(token)] = float(decision.reservation_price)
+
+
+def record_fill(token: str, side: str, size: float, price: float,
+                is_maker: bool = True, rebate_rate: float = 0.0) -> None:
+    """Record a confirmed fill into the PnL attributor (spread + rebates)."""
+    reservation = _last_reservation.get(str(token), float(price))
+    if rebate_rate and ATTRIBUTOR.rebate_rate != rebate_rate:
+        ATTRIBUTOR.rebate_rate = rebate_rate
+    try:
+        ATTRIBUTOR.record_fill(side, float(size), float(price), reservation, is_maker)
+    except Exception:
+        pass
+
+
+def pnl_summary() -> str:
+    """Human-readable PnL attribution line (spread / rebates / rewards)."""
+    return ATTRIBUTOR.summary_str()
 
 
 def build_config(params: Optional[Dict[str, Any]], row: Any) -> StrategyConfig:

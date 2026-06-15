@@ -67,6 +67,11 @@ class QuoteDecision:
     spread_multiplier: float
     arb: Optional[ArbOpportunity] = None
     reasons: List[str] = field(default_factory=list)
+    # Liquidity-reward observability (Phase 4): quadratic-band scores per side and
+    # whether the quote is two-sided reward-eligible (the ~3x multiplier).
+    bid_reward_score: float = 0.0
+    ask_reward_score: float = 0.0
+    reward_two_sided: bool = False
 
 
 class _MarketState:
@@ -210,15 +215,20 @@ class Quoter:
         # the opposite token is handled as its own snapshot).
         quote_ask = directive.quote_ask and ask_size > 0 and snap.position > 0
 
-        # Two-sided eligibility for max rewards: if config requires it and one side
-        # is down for non-risk reasons (no inventory to sell), that's acceptable -
-        # we never *add* risk just to be two-sided.
+        # Liquidity-reward observability: score each resting quote against the
+        # quadratic band and flag two-sided eligibility (the ~3x reward multiplier).
+        final_bid = bid_price if quote_bid else None
+        final_ask = ask_price if quote_ask else None
+        bid_rs, ask_rs = rewards.expected_reward(
+            final_bid, final_ask, fair, cfg.reward_max_spread,
+            bid_size if quote_bid else 0.0, ask_size if quote_ask else 0.0,
+        )
 
         return QuoteDecision(
             quote_bid=quote_bid,
             quote_ask=quote_ask,
-            bid_price=bid_price if quote_bid else None,
-            ask_price=ask_price if quote_ask else None,
+            bid_price=final_bid,
+            ask_price=final_ask,
             bid_size=bid_size if quote_bid else 0.0,
             ask_size=ask_size if quote_ask else 0.0,
             fair_value=fair,
@@ -229,4 +239,7 @@ class Quoter:
             spread_multiplier=directive.spread_multiplier,
             arb=arb,
             reasons=directive.reasons,
+            bid_reward_score=bid_rs,
+            ask_reward_score=ask_rs,
+            reward_two_sided=rewards.two_sided_ok(final_bid, final_ask),
         )

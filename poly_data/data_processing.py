@@ -217,6 +217,12 @@ def process_user_data(rows):
 
                     print("Matched. Performing is ", len(global_state.performing[col]))
                     set_position(token, side, size, price)
+                    # Attribute the fill to spread (vs reservation) + maker rebates.
+                    try:
+                        from poly_data import strategy_adapter
+                        strategy_adapter.record_fill(token, side, size, price, is_maker=is_user_maker)
+                    except Exception:
+                        pass
                     print("Position after matching is ", global_state.positions[str(token)])
                     print("Last trade update is ", global_state.last_trade_update)
                     print("Performing is ", global_state.performing)

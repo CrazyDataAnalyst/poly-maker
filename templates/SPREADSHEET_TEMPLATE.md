@@ -64,7 +64,7 @@ carries the last non-empty `type` forward). Import
 
 | param | default | What it controls / when to change |
 |-------|---------|-----------------------------------|
-| `use_strategy_engine` | `0` | **Master switch.** Set `1` to route this `param_type` through the quant engine; `0` keeps the original logic. |
+| `use_strategy_engine` | `1` | **On by default** (the engine is the only quoting path in v2). Set `0` to disable quoting for this `param_type`. |
 | `gamma` | `2.0` | AS risk aversion. Higher ⇒ wider spreads and stronger inventory skew. |
 | `kappa` | `30.0` | Order-arrival decay. Higher ⇒ tighter base spread (min half-spread ≈ `1/kappa`). |
 | `horizon_hours` | `24.0` | Planning horizon (T−t) when no end date is known; scales the inventory penalty. |
@@ -95,17 +95,11 @@ Optional overrides (otherwise taken from the market row): `base_order_size`
 (else `trade_size`), `max_order_size` (else `max_size`), `reward_max_spread`
 (else the market's `max_spread`), `tick_size`.
 
-### Legacy parameters (used only when `use_strategy_engine = 0`)
-
-| param | example | Meaning |
-|-------|---------|---------|
-| `stop_loss_threshold` | `-25` | PnL % that triggers a stop-loss exit. |
-| `spread_threshold` | `0.03` | Max spread (price) at which a stop-loss may execute. |
-| `volatility_threshold` | `20` | 3-hour volatility above which the bot stops adding risk. |
-| `take_profit_threshold` | `3` | Take-profit markup % above average cost. |
-| `sleep_period` | `6` | Hours to pause buying after a stop-loss. |
-
-> The legacy example values are placeholders — tune to your own risk tolerance.
+> The legacy quoting parameters (`stop_loss_threshold`, `take_profit_threshold`,
+> `spread_threshold`, `volatility_threshold`, `sleep_period`) were **removed in the
+> v2 cutover** — the strategy engine is now the only quoting path, so those columns
+> are no longer read and can be deleted from the sheet. `use_strategy_engine`
+> defaults to on; set it to `0` to disable quoting a param-type.
 
 ---
 
