@@ -223,6 +223,19 @@ python run_backtest.py --mode csv --book book.csv --trades trades.csv \
 python paper_trade.py --tokens <token1>,<token2>
 ```
 
+### Real-data backtesting & live trading via Nautilus Trader
+
+For venue-accurate validation on **real Polymarket order-book data** (real fills,
+the actual fee model, and identical backtest/live code), `poly_nautilus/` wraps
+the engine in a [Nautilus Trader](https://github.com/nautechsystems/nautilus_trader)
+strategy. See [`NAUTILUS.md`](NAUTILUS.md).
+
+```bash
+uv sync --extra nautilus
+python -m poly_nautilus.backtest --market-slug <slug> --start 2026-01-01 --end 2026-02-01
+python -m poly_nautilus.live --token <token_id> --condition <condition_id> --paper
+```
+
 ## Poly Merger
 
 The `poly_merger` module is a particularly powerful utility that handles position merging on Polymarket. It's built on open-source Polymarket code and provides a smooth way to consolidate positions, reducing gas fees and improving capital efficiency.

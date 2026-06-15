@@ -29,6 +29,12 @@ dev = [
     "black==24.4.2",
     "pytest==8.2.2",
 ]
+# Nautilus Trader integration for real-data backtesting and live/forward trading.
+# Heavy (Rust-backed) dependency; install only when using poly_nautilus:
+#   uv pip install "nautilus_trader[polymarket]"
+nautilus = [
+    "nautilus_trader[polymarket]>=1.200.0",
+]
 
 [build-system]
 requires = ["hatchling"]
