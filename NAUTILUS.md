@@ -28,16 +28,36 @@ directly comparable — the whole point of using Nautilus over a bespoke harness
   Polymarket fee model (incl. maker rebates), live execution, and identical
   backtest/live code. Use it for the **final** validation before risking capital.
 
-## Install
+## Install — in a SEPARATE venv (required)
+
+Nautilus **cannot** be installed into the main bot's environment. Its Polymarket
+adapter pins a `py-clob-client` range that conflicts with this bot's
+`py-clob-client==0.28.0` (used by the live `PolymarketClient`), and it requires
+Python **>=3.12** while the bot supports >=3.9.10. Trying `uv sync --extra ...`
+fails with an unsatisfiable resolution for exactly these reasons.
+
+Use a dedicated venv instead:
 
 ```bash
-uv pip install "nautilus_trader[polymarket]"
-# or, via the optional group added to pyproject.toml:
-uv sync --extra nautilus
+# from the repo root
+uv venv --python 3.12 .venv-nautilus
+uv pip install --python .venv-nautilus -r requirements-nautilus.txt
 ```
 
-Nautilus is Rust-backed and large; it is an **optional** dependency. The rest of
-the bot (and `poly_backtest`) runs without it.
+Then run the integration with that interpreter (not `uv run`, which uses the main
+venv):
+
+```bash
+# macOS / Linux
+.venv-nautilus/bin/python -m poly_nautilus.backtest --market-slug <slug> ...
+# Windows
+.venv-nautilus\Scripts\python -m poly_nautilus.backtest --market-slug <slug> ...
+```
+
+`poly_nautilus` only imports `poly_strategy` (pure stdlib) and pandas (a Nautilus
+dependency), so running from the repo root is enough — the main bot does not need
+to be installed into this venv. The rest of the bot (and `poly_backtest`) runs in
+the main venv, completely independent of Nautilus.
 
 ## Credentials (live only — backtest needs none)
 

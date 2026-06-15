@@ -230,10 +230,14 @@ the actual fee model, and identical backtest/live code), `poly_nautilus/` wraps
 the engine in a [Nautilus Trader](https://github.com/nautechsystems/nautilus_trader)
 strategy. See [`NAUTILUS.md`](NAUTILUS.md).
 
+Nautilus must live in its own Python 3.12 venv (its Polymarket adapter conflicts
+with this bot's `py-clob-client==0.28.0`):
+
 ```bash
-uv sync --extra nautilus
-python -m poly_nautilus.backtest --market-slug <slug> --start 2026-01-01 --end 2026-02-01
-python -m poly_nautilus.live --token <token_id> --condition <condition_id> --paper
+uv venv --python 3.12 .venv-nautilus
+uv pip install --python .venv-nautilus -r requirements-nautilus.txt
+.venv-nautilus/bin/python -m poly_nautilus.backtest --market-slug <slug> --start 2026-01-01 --end 2026-02-01
+.venv-nautilus/bin/python -m poly_nautilus.live --token <token_id> --condition <condition_id> --paper
 ```
 
 ## Poly Merger
