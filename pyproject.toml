@@ -29,6 +29,10 @@ dev = [
     "black==24.4.2",
     "pytest==8.2.2",
 ]
+# NOTE: Nautilus Trader is intentionally NOT an extra of this project. Its
+# Polymarket adapter pins a py-clob-client range that conflicts with this bot's
+# py-clob-client==0.28.0, and it requires Python >=3.12. Install it in a separate
+# dedicated venv instead (see requirements-nautilus.txt and NAUTILUS.md).
 
 [build-system]
 requires = ["hatchling"]

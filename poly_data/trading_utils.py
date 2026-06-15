@@ -1,29 +1,6 @@
-import math 
-from poly_data.data_utils import update_positions
+import math
 import poly_data.global_state as global_state
 
-# def get_avgPrice(position, assetId):
-#     curr_global = global_state.all_positions[global_state.all_positions['asset'] == str(assetId)]
-#     api_position_size = 0
-#     api_avgPrice = 0
-
-#     if len(curr_global) > 0:
-#         c_row = curr_global.iloc[0]
-#         api_avgPrice = round(c_row['avgPrice'], 2)
-#         api_position_size = c_row['size']
-
-#     if position > 0:
-#         if abs((api_position_size - position)/position * 100) > 5:
-#             print("Updating global positions")
-#             update_positions()
-
-#             try:
-#                 c_row = curr_global.iloc[0]
-#                 api_avgPrice = round(c_row['avgPrice'], 2)
-#                 api_position_size = c_row['size']
-#             except:
-#                 return 0
-#     return api_avgPrice
 
 def get_best_bid_ask_deets(market, name, size, deviation_threshold=0.05):
 
@@ -80,6 +57,33 @@ def get_best_bid_ask_deets(market, name, size, deviation_threshold=0.05):
     }
 
 
+def get_token_best_bid_ask(token, size=20):
+    """Best bid/ask (and sizes) from a token's *real* order book.
+
+    Reads global_state.all_token_data[token], which holds the actual book for the
+    token (not the 1-price derivation get_best_bid_ask_deets uses for token2).
+    Returns None if the token's book has not been received yet.
+    """
+    token = str(token)
+    data = global_state.all_token_data.get(token)
+    if not data:
+        return None
+
+    best_bid, best_bid_size, second_best_bid, second_best_bid_size, top_bid = \
+        find_best_price_with_size(data['bids'], size, reverse=True)
+    best_ask, best_ask_size, second_best_ask, second_best_ask_size, top_ask = \
+        find_best_price_with_size(data['asks'], size, reverse=False)
+
+    return {
+        'best_bid': best_bid,
+        'best_bid_size': best_bid_size,
+        'best_ask': best_ask,
+        'best_ask_size': best_ask_size,
+        'top_bid': top_bid,
+        'top_ask': top_ask,
+    }
+
+
 def find_best_price_with_size(price_dict, min_size, reverse=False):
     lst = list(price_dict.items())
 
@@ -106,40 +110,6 @@ def find_best_price_with_size(price_dict, min_size, reverse=False):
 
     return best_price, best_size, second_best_price, second_best_size, top_price
 
-def get_order_prices(best_bid, best_bid_size, top_bid,  best_ask, best_ask_size, top_ask, avgPrice, row):
-
-    bid_price = best_bid + row['tick_size']
-    ask_price = best_ask - row['tick_size']
-
-    if best_bid_size < row['min_size'] * 1.5:
-        bid_price = best_bid
-    
-    if best_ask_size < 250 * 1.5:
-        ask_price = best_ask
-    
-
-    if bid_price >= top_ask:
-        bid_price = top_bid
-
-    if ask_price <= top_bid:
-        ask_price = top_ask
-
-    if bid_price == ask_price:
-        bid_price = top_bid
-        ask_price = top_ask
-
-    # if ask_price <= avgPrice:
-    #     if avgPrice - ask_price <= (row['max_spread']*1.7/100):
-    #         ask_price = avgPrice
-
-    #temp for sleep
-    if ask_price <= avgPrice and avgPrice > 0:
-        ask_price = avgPrice
-
-    return bid_price, ask_price
-
-
-
 
 def round_down(number, decimals):
     factor = 10 ** decimals
@@ -148,49 +118,4 @@ def round_down(number, decimals):
 def round_up(number, decimals):
     factor = 10 ** decimals
     return math.ceil(number * factor) / factor
-
-def get_buy_sell_amount(position, bid_price, row, other_token_position=0):
-    buy_amount = 0
-    sell_amount = 0
-
-    # Get max_size, defaulting to trade_size if not specified
-    max_size = row.get('max_size', row['trade_size'])
-    trade_size = row['trade_size']
-    
-    # Calculate total exposure across both sides
-    total_exposure = position + other_token_position
-    
-    # If we haven't reached max_size on either side, continue building
-    if position < max_size:
-        # Continue quoting trade_size amounts until we reach max_size
-        remaining_to_max = max_size - position
-        buy_amount = min(trade_size, remaining_to_max)
-        
-        # Only sell if we have substantial position (to allow for exit when needed)
-        if position >= trade_size:
-            sell_amount = min(position, trade_size)
-        else:
-            sell_amount = 0
-    else:
-        # We've reached max_size, implement progressive exit strategy
-        # Always offer to sell trade_size amount when at max_size
-        sell_amount = min(position, trade_size)
-        
-        # Continue quoting to buy if total exposure warrants it
-        if total_exposure < max_size * 2:  # Allow some flexibility for market making
-            buy_amount = trade_size
-        else:
-            buy_amount = 0
-
-    # Ensure minimum order size compliance
-    if buy_amount > 0.7 * row['min_size'] and buy_amount < row['min_size']:
-        buy_amount = row['min_size']
-
-    # Apply multiplier for low-priced assets
-    if bid_price < 0.1 and buy_amount > 0:
-        if row['multiplier'] != '':
-            print(f"Multiplying buy amount by {int(row['multiplier'])}")
-            buy_amount = buy_amount * int(row['multiplier'])
-
-    return buy_amount, sell_amount
 

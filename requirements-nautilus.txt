@@ -1,0 +1,19 @@
+# Dedicated environment for the Nautilus Trader backtest/live integration
+# (poly_nautilus/). DO NOT install these into the main bot's venv.
+#
+# Why a separate venv:
+#   * Nautilus's Polymarket adapter pins a py-clob-client range that conflicts
+#     with the main bot's py-clob-client==0.28.0 (used by poly_data's live client).
+#   * Nautilus requires Python >=3.12, while the bot supports >=3.9.10.
+#
+# Setup (from the repo root):
+#   uv venv --python 3.12 .venv-nautilus
+#   uv pip install --python .venv-nautilus -r requirements-nautilus.txt
+#   # then run with that interpreter, e.g.:
+#   .venv-nautilus/bin/python -m poly_nautilus.backtest --market-slug <slug>   # macOS/Linux
+#   .venv-nautilus\Scripts\python -m poly_nautilus.backtest --market-slug <slug>  # Windows
+#
+# poly_nautilus only needs poly_strategy (pure stdlib) + pandas (a Nautilus dep),
+# so running from the repo root is sufficient; the main bot need not be installed.
+
+nautilus_trader[polymarket]

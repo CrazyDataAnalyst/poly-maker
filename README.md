@@ -142,6 +142,104 @@ The bot is configured via a Google Spreadsheet with several worksheets:
 - **Hyperparameters**: Configuration parameters for the trading logic
 
 
+## Strategy Engine (`poly_strategy`)
+
+The `poly_strategy` package is a self-contained quantitative quoting brain that
+replaces the legacy "quote one tick inside the mid" logic with the
+Avellaneda-Stoikov / GLFT framework adapted for binary, bounded prediction
+markets. It is dependency-light (stdlib `math` only) and fully unit-tested
+offline (`python3 tests/test_strategy.py`).
+
+### What it does
+
+| Module | Responsibility | Lever |
+|---|---|---|
+| `fair_value.py` | Micro-price + log-odds belief smoothing | Fair value, not mid-price |
+| `volatility.py` | EWMA realized vol in log-odds space (+ sheet prior) | Spread sizing |
+| `avellaneda.py` | Reservation price + AS/GLFT optimal spread | Inventory-aware pricing |
+| `inventory.py` | Hard limit `Q` from max loss, Kelly-capped sizing | Inventory safety |
+| `toxicity.py` | VPIN (bulk-volume classification) | Adverse-selection defense |
+| `arbitrage.py` | Dutch-book / NegRisk detection | Risk-free PnL |
+| `rewards.py` | Polymarket quadratic reward-band placement | Liquidity rewards |
+| `risk.py` | Kill switches + staged resolution withdrawal | Risk controls |
+| `quoter.py` | Orchestrates the above into a `QuoteDecision` | Integration surface |
+
+### Enabling it
+
+The engine is **opt-in per param-type** and off by default, so it never silently
+changes a live bot. Add a `use_strategy_engine` row (value `1`) to the
+`Hyperparameters` sheet for the param-type you want it on. When set, `trading.py`
+hands that market to `run_engine_outcomes`; otherwise the original logic runs
+unchanged.
+
+### Tunable hyperparameters (all optional, conservative defaults)
+
+`gamma`, `kappa` (AS risk-aversion / arrival decay), `max_loss_usd` (sets the hard
+inventory limit `Q`), `min_half_spread`, `max_half_spread`, `kelly_fraction`,
+`vol_ewma_lambda`, `sheet_vol_weight`, `vpin_bucket_size`, `vpin_num_buckets`,
+`vpin_widen_threshold`, `vpin_kill_threshold`, `reward_band_fraction`,
+`resolution_widen_hours`, `resolution_withdraw_hours`, `arb_min_edge`,
+`min_price`, `max_price`. Existing `trade_size`/`max_size`/`max_spread`/`tick_size`
+are reused automatically. See `poly_strategy/config.py` for the full list and
+defaults.
+
+### Configuration template
+
+A full description of every worksheet and parameter (legacy + engine) lives in
+[`templates/SPREADSHEET_TEMPLATE.md`](templates/SPREADSHEET_TEMPLATE.md), with a
+ready-to-import `Hyperparameters` sheet in
+[`templates/hyperparameters_template.csv`](templates/hyperparameters_template.csv).
+
+### Active features & remaining limitations
+
+- **Cross-token Dutch-book arbitrage is active**: both outcome tokens are now
+  subscribed and each token's real order book is tracked, so the detector fires
+  on genuine `P(YES)+P(NO) != 1` dislocations. Detected opportunities are logged;
+  *automatic execution* of the two legs is intentionally not enabled (it moves
+  real capital and needs atomic dual-leg handling) — that's the next step.
+- **Staged resolution withdrawal is active when `end_date_iso` is present**:
+  re-run `python update_markets.py` after upgrading so that column is written to
+  the All Markets sheet. Without it the bot can't know expiry and skips the
+  withdrawal layer.
+- **VPIN feed is an order-flow proxy** (top-of-book consumption), not true trade
+  prints; subscribing to the market trade channel would sharpen it.
+
+## Backtesting & Forward-Testing
+
+`poly_backtest/` validates the engine offline (historical replay) and live (paper
+trading), computing PnL, Sharpe, Sortino, and drawdown from a shared simulation
+core — so backtest and live-paper results are directly comparable. See
+[`BACKTESTING.md`](BACKTESTING.md) for the full methodology and fill-model caveats.
+
+```bash
+# Synthetic sanity check (no data needed)
+python run_backtest.py --mode synthetic --steps 8000 --gamma 2
+
+# Historical CSV (e.g. github.com/warproxxx/poly_data) — map your columns
+python run_backtest.py --mode csv --book book.csv --trades trades.csv \
+    --book-cols ts=t,token=asset,bid=best_bid,ask=best_ask --outcome YES=1
+
+# Forward-test on LIVE data, read-only, never places orders
+python paper_trade.py --tokens <token1>,<token2>
+```
+
+### Real-data backtesting & live trading via Nautilus Trader
+
+For venue-accurate validation on **real Polymarket order-book data** (real fills,
+the actual fee model, and identical backtest/live code), `poly_nautilus/` wraps
+the engine in a [Nautilus Trader](https://github.com/nautechsystems/nautilus_trader)
+strategy. See [`NAUTILUS.md`](NAUTILUS.md).
+
+Nautilus must live in its own Python 3.12 venv (its Polymarket adapter conflicts
+with this bot's `py-clob-client==0.28.0`):
+
+```bash
+uv venv --python 3.12 .venv-nautilus
+uv pip install --python .venv-nautilus -r requirements-nautilus.txt
+.venv-nautilus/bin/python -m poly_nautilus.backtest --market-slug <slug> --start 2026-01-01 --end 2026-02-01
+.venv-nautilus/bin/python -m poly_nautilus.live --token <token_id> --condition <condition_id> --paper
+```
+
 ## Poly Merger
 
 The `poly_merger` module is a particularly powerful utility that handles position merging on Polymarket. It's built on open-source Polymarket code and provides a smooth way to consolidate positions, reducing gas fees and improving capital efficiency.

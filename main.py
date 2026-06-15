@@ -54,13 +54,14 @@ def update_periodically():
     - Stale pending trades are removed each cycle
     """
     i = 1
+    cycle = 0
     while True:
         time.sleep(5)  # Update every 5 seconds
-        
+
         try:
             # Clean up stale trades
             remove_from_pending()
-            
+
             # Update positions and orders every cycle
             update_positions(avgOnly=True)  # Only update average price, not position size
             update_orders()
@@ -69,7 +70,16 @@ def update_periodically():
             if i % 6 == 0:
                 update_markets()
                 i = 1
-                    
+
+            # Print the PnL attribution summary roughly hourly (720 * 5s).
+            cycle += 1
+            if cycle % 720 == 0:
+                try:
+                    import poly_data.strategy_adapter as sa
+                    print(f"[pnl] {sa.pnl_summary()}")
+                except Exception:
+                    pass
+
             gc.collect()  # Force garbage collection to free memory
             i += 1
         except:

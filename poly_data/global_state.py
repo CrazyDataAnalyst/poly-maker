@@ -10,10 +10,23 @@ all_tokens = []
 REVERSE_TOKENS = {}  
 
 # Order book data for all markets
-all_data = {}  
+all_data = {}
+
+# Per-token real order books, keyed by token_id.
+# Format: {token_id: {'bids': SortedDict, 'asks': SortedDict}}
+# Unlike all_data (which holds only the primary/token1 book per market and
+# derives the other side as 1 - price), this stores the *actual* book for every
+# subscribed token. Required for true cross-token Dutch-book arbitrage detection
+# and accurate quoting of the second outcome.
+all_token_data = {}
+
+# Maps a market's condition_id -> its primary token (token1). Used to keep the
+# legacy all_data[market] book pointed at token1 even though both tokens are now
+# subscribed on the market websocket.
+MARKET_TOKEN1 = {}
 
 # Market configuration data from Google Sheets
-df = None  
+df = None
 
 # ============ Client & Parameters ============
 
